@@ -10,8 +10,8 @@ $ProjectRoot = Split-Path -Parent $PSCommandPath
 $Dist = Join-Path $ProjectRoot "dist"
 New-Item -ItemType Directory -Path $Dist -Force | Out-Null
 
-if (-not (Test-Path (Join-Path $ProjectRoot "src\Configurable Dodge Mod\Scripts\main.lua"))) {
-    throw "src\Configurable Dodge Mod\Scripts\main.lua not found"
+if (-not (Test-Path (Join-Path $ProjectRoot "src\ConfigurableDodgeMod\Scripts\main.lua"))) {
+    throw "src\ConfigurableDodgeMod\Scripts\main.lua not found"
 }
 
 $GameDir = "D:\Steam\steamapps\common\S.T.A.L.K.E.R. 2 Heart of Chornobyl"
@@ -26,7 +26,7 @@ function New-Package($name, $installerText, $includeRuntime) {
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
     # mod folder (renamed to the UE4SS mod id expected by mods.txt)
-    Copy-Item -Recurse (Join-Path $ProjectRoot "src\Configurable Dodge Mod") (Join-Path $stage "Configurable Dodge Mod")
+    Copy-Item -Recurse (Join-Path $ProjectRoot "src\ConfigurableDodgeMod") (Join-Path $stage "ConfigurableDodgeMod")
 
     # installation readme
     Set-Content -LiteralPath (Join-Path $stage "INSTALL.txt") -Value $installerText -Encoding UTF8
@@ -45,6 +45,27 @@ function New-Package($name, $installerText, $includeRuntime) {
         Get-ChildItem "$stage\ue4ss" -Recurse -File -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -match "\.log$|\.dmp$|_ObjectDump" } |
             Remove-Item -Force
+
+        # redistribute the UE4SS compatibility fix's attribution files alongside
+        # its patched binaries (required by its attribution terms)
+        $fixZip = Join-Path $GameDir "mod packs\STALKER2 UE4SS Update2.0.5 Compatibility Fix V1.2 2341 1.2 2026-09-13T07-37Z OxGWqGd2R.zip"
+        if (Test-Path $fixZip) {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $attrDir = Join-Path $stage "CompatibilityFix-Attribution"
+            New-Item -ItemType Directory -Path $attrDir -Force | Out-Null
+            $fx = [System.IO.Compression.ZipFile]::OpenRead($fixZip)
+            foreach ($e in $fx.Entries) {
+                if ($e.FullName -match '(^|/)(LICENSES_AND_ATTRIBUTION\.txt|SOURCE_AND_BUILD_INFO\.txt|CHANGELOG\.txt)$|^(patches|licenses)/[^/]+$') {
+                    $dest = Join-Path $attrDir ($e.FullName -replace '/', '\')
+                    $destParent = Split-Path -Parent $dest
+                    if (-not (Test-Path $destParent)) { New-Item -ItemType Directory -Path $destParent -Force | Out-Null }
+                    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $dest, $true)
+                }
+            }
+            $fx.Dispose()
+        } else {
+            Write-Warning "Compatibility-fix zip not found at $fixZip - attribution files NOT bundled. Build the next release where it's reachable."
+        }
     }
 
     $zipPath = Join-Path $Dist "$name.zip"
@@ -96,6 +117,8 @@ New-Package "Configurable Dodge Mod_$($Version)_mod-only" $modOnlyText $false
 New-Package "Configurable Dodge Mod_$($Version)_full" $fullText $true
 
 Write-Output "done."
+
+
 
 
 

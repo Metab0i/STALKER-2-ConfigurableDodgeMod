@@ -15,8 +15,8 @@ Mod Configuration Menu.
 
 ## Install
 
-1. Copy the `Configurable Dodge Mod` folder to `Stalker2\Binaries\Win64\ue4ss\Mods\`
-2. Add `Configurable Dodge Mod : 1` to `ue4ss\Mods\mods.txt`
+1. Copy the `ConfigurableDodgeMod` folder to `Stalker2\Binaries\Win64\ue4ss\Mods\`
+2. Add `ConfigurableDodgeMod : 1` to `ue4ss\Mods\mods.txt`
 3. Launch. Double-tap Z / C / S to dodge.
 
 ## Configure
@@ -35,5 +35,6 @@ Settings apply live while the game runs.
   update 2.0's engine and cannot load on it; this is a script-side rebuild
 - **UE4SS** (RE-UE4SS, MIT) and the community compatibility fix (Nexus 2341)
 - **Mod Configuration Menu** by Kyne / ZunaSW (Nexus 2225)
+
 
 
