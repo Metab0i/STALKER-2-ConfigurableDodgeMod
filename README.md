@@ -29,16 +29,23 @@ Mod Configuration Menu.
 
 1. Copy the `ConfigurableDodgeMod` folder to `Stalker2\Binaries\Win64\ue4ss\Mods\`
 2. Add `ConfigurableDodgeMod : 1` to `ue4ss\Mods\mods.txt`
-3. Launch. Double-tap Z / C / S to dodge.
+3. Launch. Hold a movement key and press **Mouse 5** to dodge (double-tap `Z` / `C` / `S` also works).
 
 ## Configure
 
-Press your MCM key (default `B`) in game → open **Configurable Dodge Mod**.
+Press your MCM key in game → open **Configurable Dodge Mod**.
 Settings apply live while the game runs.
+
+- **Dodge Button Key**: the button pressed together with a movement key
+  (default `Mouse 5`). The capture field accepts mouse buttons — side
+  buttons are the recommended dodge buttons, since keyboard-button delivery
+  depends on UE4SS's input hook and can be unreliable after loading a world.
+- Dodge strengths, stamina cost, and the double-tap keys are all in MCM too.
 
 ## Notes
 
 - Each dodge costs 20 SP (vanilla jump); dodging is blocked at low stamina
+- Dodging is disabled while the game is in a menu/dialog (stash, conversations)
 - If MCM settings don't appear at first, save the game once and load that save
 
 ## Credits
