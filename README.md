@@ -4,6 +4,14 @@ Double-tap **Z** (left), **C** (right) or **S** (back) and Skif hops out of the
 way. Values (dodge strengths, stamina cost, keys) are configurable in the
 Mod Configuration Menu.
 
+![MCM mod header](media/mcm-header.png)
+
+![MCM settings - full view](media/mcm-full.png)
+
+![Force settings](media/mcm-force.png)
+
+![Keybinds settings](media/mcm-keybinds.png)
+
 ## Requirements
 
 | Dependency | Version / ID |
