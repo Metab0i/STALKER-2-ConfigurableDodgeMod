@@ -1,7 +1,9 @@
 [size=4][b]Description[/b][/size][size=3][color=#D4D4D8]
-Configurable Dodge Mod adds a proper dodge to S.T.A.L.K.E.R. 2. Double-tap a movement key and Skif hops out of the way - left, right or backwards, relative to wherever you are looking. Every force value and every keybind is configurable live in the Mod Configuration Menu, and each dodge costs stamina through the game's own vitals system (same cost as a vanilla jump).
+Configurable Dodge Mod adds a proper dodge to S.T.A.L.K.E.R. 2. Double-tap a movement key and Skif hops out of the way - left, right or backwards, relative to wherever you are looking. Every force value and every keybind is configurable live in the Mod Configuration Menu, and each dodge costs stamina through the game's own vitals system (same cost as a vanilla jump), so it plays by the Zone's rules instead of being a free escape button.
 
 This is a from-scratch rebuild of the classic Dodge mod concept for game update 2.0+, implemented as an UE4SS script mod.
+
+[img=https://raw.githubusercontent.com/Metab0i/STALKER-2---Configurable-Dodge-Mod/development/media/mcm-header.png]
 
 [/color][/size][size=4][b]Installation instructions[/b][/size][size=3][color=#D4D4D8]
 [i]Option A - "full" package (recommended if you do not have UE4SS yet):[/i]
@@ -30,6 +32,15 @@ folder (the one containing Stalker2-Win64-Shipping.exe). This installs a UE4SS r
 [*]MCM is optional - without it the mod runs on sensible defaults
 [/list]
 
+Full settings view:
+[img=https://raw.githubusercontent.com/Metab0i/STALKER-2---Configurable-Dodge-Mod/development/media/mcm-full.png]
+
+The "Force" category:
+[img=https://raw.githubusercontent.com/Metab0i/STALKER-2---Configurable-Dodge-Mod/development/media/mcm-force.png]
+
+The "Keybinds" category:
+[img=https://raw.githubusercontent.com/Metab0i/STALKER-2---Configurable-Dodge-Mod/development/media/mcm-keybinds.png]
+
 [/color][/size][size=4][b]Requirements[/b][/size][size=3][color=#D4D4D8]
 [list]
 [*]S.T.A.L.K.E.R. 2: Heart of Chornobyl, update [b]2.0 or newer[/b] (Steam)
@@ -43,7 +54,7 @@ rbwadle for inspiring the idea - the original [url=https://www.nexusmods.com/sta
 
 [b]Kyne's Peace / ZunaSW[/b] for the excellent [url=https://www.nexusmods.com/stalker2heartofchornobyl/mods/2225]Mod Configuration Menu[/url]
 
-The [b]RE-UE4SS[/b] team (MIT-licensed UE4SS), and the community compatibility effort for STALKER 2's UE 5.5.4 build: robert-krukau (compat build and testing) and chrisdabeer ( FName::ToString signature and ProcessLocalScriptFunction investigation)
+[b]RE-UE4SS[/b] team (MIT-licensed UE4SS), and the community compatibility effort for STALKER 2's UE 5.5.4 build: robert-krukau (compat build and testing) and chrisdabeer (FName::ToString signature and ProcessLocalScriptFunction investigation)
 
 GSC Game World for one of the most moddable UE5 games in years
 [/color][/size]
