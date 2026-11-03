@@ -1,5 +1,7 @@
 ﻿# Configurable Dodge Mod for S.T.A.L.K.E.R. 2
 
+![Configurable Dodge Mod thumbnail](media/main.png)
+
 Double-tap **Z** (left), **C** (right) or **S** (back) and Skif hops out of the
 way. Values (dodge strengths, stamina cost, keys) are configurable in the
 Mod Configuration Menu.
@@ -12,7 +14,7 @@ Mod Configuration Menu.
 
 ## Demo
 
-Watch the dodge in action: [dodging demo video](media/dodging.demo.mp4)
+[![Dodging demo video](https://img.youtube.com/vi/KpYUs2ZFAlU/0.jpg)](https://www.youtube.com/watch?v=KpYUs2ZFAlU)
 
 ## Requirements
 
