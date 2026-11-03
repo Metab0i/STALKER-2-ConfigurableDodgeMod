@@ -10,6 +10,10 @@ Mod Configuration Menu.
 
 ![Keybinds settings](media/mcm-keybinds.png)
 
+## Demo
+
+Watch the dodge in action: [dodging demo video](media/dodging.demo.mp4)
+
 ## Requirements
 
 | Dependency | Version / ID |
