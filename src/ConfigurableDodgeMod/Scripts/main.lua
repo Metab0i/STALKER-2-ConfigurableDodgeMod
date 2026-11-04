@@ -35,7 +35,8 @@ do
             local sep = (string.find(root, "\\", 1, true) ~= nil) and "\\" or "/"
             cfgPath = root .. "ConfigurableDodgeMod.ini"
             pcall(function()
-                local h = io.open(root .. ".hotreload", "rb")
+                local h = io.open(devDir .. sep .. ".hotreload", "rb")
+                if h == nil then h = io.open(root .. ".hotreload", "rb") end
                 if h ~= nil then
                     h:close()
                     devEnabled = true
@@ -327,13 +328,17 @@ LoopAsync(50, function()
     local content
     pcall(function()
         local h = io.open(signalPath, "r")
-        if h ~= nil then content = h:read("*a"); h:close() end
+        -- NOTE: read("*l"), not read("*a") - the C runtime rejects the
+        -- "copy to EOF" read on Windows named pipes (EINVAL), while a
+        -- single line read works. The listener writes one line per
+        -- connection and disconnects (EOF).
+        if h ~= nil then content = h:read("*l"); h:close() end
     end)
     if content == nil then
         -- listener not running (or starting up): inform once after a grace period
         if not signalMissingNoticed and GetPC() ~= nil and Now() > 15.0 then
             signalMissingNoticed = true
-            local msg = "Dodge keys are inactive: the key listener is not running. Restart the game once (the mod starts it automatically), or run Listener.bat in the mod folder."
+            local msg = "Dodge keys are inactive: the key listener is not running. Restart the game once (the mod starts it automatically), or run DodgeSignal.ps1 in the mod folder."
             print("[Configurable Dodge Mod] " .. msg)
             pcall(function()
                 local PC = GetPC()
@@ -346,8 +351,10 @@ LoopAsync(50, function()
     end
     signalMissingNoticed = false
 
-    for line in string.gmatch(content, "[^\r\n]+") do
-        local k, v = string.match(line, "^%s*(%w+)%s*=%s*(%d+)%s*$")
+    -- the listener sends all counters on one line ("btn=N dtl=N dtr=N dtb=N"),
+    -- so split on whitespace and parse each token
+    for token in string.gmatch(content, "%S+") do
+        local k, v = string.match(token, "^(%w+)=(%d+)$")
         if k ~= nil then
             local n = tonumber(v)
             local last = signalLast[k]
@@ -402,8 +409,8 @@ end)
 -- ================= auto-start the signal listener =================
 -- (os.execute verified available; the listener is mutex-guarded, so double
 -- spawns are harmless, and it auto-exits when the game closes)
-if os ~= nil and type(os.execute) == "function" and signalPath ~= nil then
-    local listenerPath = string.gsub(signalPath, "dodge_signals%.txt$", "DodgeSignal.ps1")
+if os ~= nil and type(os.execute) == "function" and cfgPath ~= nil then
+    local listenerPath = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "DodgeSignal.ps1")
     pcall(function()
         os.execute('start "" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. listenerPath .. '"')
     end)

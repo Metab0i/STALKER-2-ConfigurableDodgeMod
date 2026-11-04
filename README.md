@@ -38,8 +38,8 @@ writes the config. Or edit **`ConfigurableDodgeMod.ini`** directly:
 
 - `Modality` = `button` (hold movement key + press the dodge button) or
   `doubletap` (double-tap the dodge keys) — only one is active
-- `ButtonKey` — the dodge button (default `ThumbMouseButton2` = Mouse 5;
-  note engine modifiers like Left Alt cannot be bound)
+- `ButtonKey` — the dodge button (default `Left Alt`; any keyboard key,
+  modifier (Alt/Ctrl/Shift) or mouse button works)
 - `DoubleTapLeft/Right/Back` — the double-tap keys (default `Z` / `C` / `S`)
 - Dodge forces and stamina cost
 
@@ -51,18 +51,22 @@ Changes to the ini apply **live within ~2 seconds** — no restart.
 
 - Each dodge costs 20 SP (vanilla jump); dodging is blocked at low stamina
 - Dodging is disabled while the game is in a menu/dialog (stash, conversations)
-- Modifier keys (Alt/Ctrl/Shift) as the dodge button: run Listener.bat once per
-  session (ships with the mod) - it watches Left Alt at the OS level and feeds
-  presses to the mod; auto-exits when the game closes
-- Mouse buttons are the recommended dodge buttons: keyboard-button delivery
-  depends on UE4SS's input hook and can be unreliable after loading a world
+- Modifier keys (Alt/Ctrl/Shift) are supported: UE4SS's input hook cannot see
+  them (Windows delivers them as system-key messages), so the mod starts a
+  small PowerShell listener automatically at boot. It watches the configured
+  keys at the OS level and streams presses to the mod through a named pipe
+  (kernel memory - no files are written). It is mutex-guarded, starts once,
+  and exits automatically when the game closes. If the message "Dodge keys are
+  inactive" appears, restart the game once; you can also start it manually by
+  running `DodgeSignal.ps1` in the mod folder.
+- Keyboard and mouse buttons both work; the listener handles every key
+  uniformly, so delivery is independent of UE4SS's input hook
 
 ## Credits
 
 - Dodge concept: **rbwadle** (Nexus 1243) — the original pak mod predates
   update 2.0's engine and cannot load on it; this is a script-side rebuild
 - **UE4SS** (RE-UE4SS, MIT) and the community compatibility fix (Nexus 2341)
-- **Mod Configuration Menu** by Kyne / ZunaSW (Nexus 2225)
 
 
 

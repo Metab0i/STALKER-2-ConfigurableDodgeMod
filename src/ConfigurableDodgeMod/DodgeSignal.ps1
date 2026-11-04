@@ -158,9 +158,17 @@ while ($hGame -eq [IntPtr]::Zero) {
 Write-Host "Dodge input listener running (modality: $($cur['Modality']), game pid $gamePid)."
 Write-Host "Exits automatically when the game terminates."
 
-# ================= pipe server (single persistent instance) =================
+# ================= pipe server =================
+# One-shot protocol: the Lua client opens the pipe, we write exactly one
+# state line and disconnect (EOF). The client reads it with read("*a")
+# which needs EOF to return - a persistent connection would block the
+# client thread forever and hold the single pipe instance "busy".
+#
+# NOTE: WaitForConnectionAsync may only have ONE pending wait at a time -
+# the same task is reused across 250 ms slices so the game-exit check keeps
+# running while we wait for the next client.
 $server = $null
-$writer = $null
+$waitTask = $null
 $gameDead = $false
 
 while (-not $gameDead) {
@@ -176,37 +184,28 @@ while (-not $gameDead) {
     if ($server -eq $null) {
         try {
             $server = New-Object System.IO.Pipes.NamedPipeServerStream("DodgeModSignal", [System.IO.Pipes.PipeDirection]::Out)
+            $waitTask = $null
         } catch {
-            # previous instance still winding down - brief backoff
+            # stale instance still winding down - brief backoff
             Start-Sleep -Milliseconds 100
             continue
         }
     }
 
-    # wait for the Lua client (bounded, so the game-exit check keeps running)
-    $waitTask = $server.WaitForConnectionAsync()
+    if ($waitTask -eq $null) { $waitTask = $server.WaitForConnectionAsync() }
     if (-not $waitTask.Wait(250)) { continue }
+    $waitTask = $null   # completed - a fresh wait is created next iteration
 
     try {
-        $writer = New-Object System.IO.StreamWriter($server)
-        $writer.AutoFlush = $true
-        # connected: stream state every 50 ms while the client stays
-        while ($server.IsConnected -and -not $gameDead) {
-            if ([SigListen]::WaitForSingleObject($hGame, 0) -eq 0) { $gameDead = $true; break }
-            if ($iniReadAt.ElapsedMilliseconds -gt 2000) { $iniReadAt.Restart(); Read-Ini }
-            Update-Keys
-            $state = "btn=$($counters['btn']) dtl=$($counters['dtl']) dtr=$($counters['dtr']) dtb=$($counters['dtb'])"
-            $writer.WriteLine($state)
-            Start-Sleep -Milliseconds 50
-        }
+        Update-Keys
+        $state = "btn=$($counters['btn']) dtl=$($counters['dtl']) dtr=$($counters['dtr']) dtb=$($counters['dtb'])`n"
+        $bytes = [Text.Encoding]::ASCII.GetBytes($state)
+        $server.Write($bytes, 0, $bytes.Length)
+        $server.Flush()
     } catch {}
-    finally {
-        if ($writer) { $writer.Dispose(); $writer = $null }
-    }
 
-    if ($server.IsConnected) { $server.Disconnect() }
+    try { $server.Disconnect() } catch {}
 }
 
-if ($writer) { $writer.Dispose() }
 if ($server) { $server.Dispose() }
 [SigListen]::CloseHandle($hGame) | Out-Null
