@@ -193,7 +193,17 @@ while (-not $gameDead) {
     }
 
     if ($waitTask -eq $null) { $waitTask = $server.WaitForConnectionAsync() }
-    if (-not $waitTask.Wait(250)) { continue }
+    # .Wait() re-throws if the connect task faulted (client connect/close race)
+    # - without this guard that exception terminated the whole listener and
+    # dodging went silent until the next game restart
+    $connected = $false
+    try { $connected = $waitTask.Wait(250) } catch {
+        try { $server.Dispose() } catch {}
+        $server = $null; $waitTask = $null
+        Start-Sleep -Milliseconds 100
+        continue
+    }
+    if (-not $connected) { continue }
     $waitTask = $null   # completed - a fresh wait is created next iteration
 
     try {

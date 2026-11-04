@@ -332,7 +332,8 @@ end
 --   btn=N (button modality)  dtl=N dtr=N dtb=N (double-tap modality)
 -- A counter increase = a (double-)tap completed in the listener; we dodge.
 local signalLast = {}
-local signalMissingNoticed = false
+local lastNotice = 0.0
+local lastRespawn = 0.0
 local signalReads = 0
 
 -- Read one state line from the pipe. The listener serves one connection per
@@ -360,21 +361,34 @@ local function SignalStep()
     if signalPath == nil then return end
     local content = ReadSignalLine()
     if content == nil then
-        -- listener not running (or starting up): inform once after a grace period
-        if not signalMissingNoticed and GetPC() ~= nil and Now() > 15.0 then
-            signalMissingNoticed = true
-            local msg = "Dodge keys are inactive: the key listener is not running. Restart the game once (the mod starts it automatically), or run DodgeSignal.ps1 in the mod folder."
-            print("[Configurable Dodge Mod] " .. msg)
-            pcall(function()
-                local PC = GetPC()
-                if PC ~= nil then
-                    UEHelpers.GetKismetSystemLibrary():PrintString(PC, msg, true, false, { R = 1.0, G = 0.6, B = 0.2, A = 1.0 }, 10.0)
-                end
-            end)
+        -- listener not running (or starting up): after a grace period, show a
+        -- repeating on-screen notice (top-left, orange) AND respawn the
+        -- listener automatically - a crashed listener no longer disables the
+        -- mod until the next restart
+        if Now() > 15.0 and GetPC() ~= nil then
+            if Now() - lastNotice > 45.0 then
+                lastNotice = Now()
+                local msg = "Dodge keys are inactive: the key listener is not running - restarting it automatically."
+                print("[Configurable Dodge Mod] " .. msg)
+                pcall(function()
+                    local PC = GetPC()
+                    if PC ~= nil then
+                        UEHelpers.GetKismetSystemLibrary():PrintString(PC, msg, true, false, { R = 1.0, G = 0.6, B = 0.2, A = 1.0 }, 15.0)
+                    end
+                end)
+            end
+            if Now() - lastRespawn > 30.0 and os ~= nil and type(os.execute) == "function" and cfgPath ~= nil then
+                lastRespawn = Now()
+                local listenerPath = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "DodgeSignal.ps1")
+                pcall(function()
+                    os.execute('start "" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. listenerPath .. '"')
+                end)
+                DevLog("listener missing - respawn attempted")
+            end
         end
         return
     end
-    signalMissingNoticed = false
+    lastNotice = 0.0
     signalReads = signalReads + 1
 
     -- the listener sends all counters on one line ("btn=N dtl=N dtr=N dtb=N"),
