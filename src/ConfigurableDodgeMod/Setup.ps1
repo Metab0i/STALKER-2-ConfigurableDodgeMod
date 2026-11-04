@@ -121,8 +121,10 @@ Write-Host "Minus, Plus, Comma, Period, Tilde - and mouse buttons:" -ForegroundC
 Write-Host "  LeftMouseButton / RightMouseButton / MiddleMouseButton /" -ForegroundColor DarkGray
 Write-Host "  ThumbMouseButton (Mouse 4) / ThumbMouseButton2 (Mouse 5)" -ForegroundColor DarkGray
 Write-Host "Full reference: https://ue4ss.org/data-complex/coding-standard#a-name-usage" -ForegroundColor DarkGray
-Write-Host "NOTE: modifier keys (Alt / Ctrl / Shift) can NEVER be dodge buttons -" -ForegroundColor Red
-Write-Host "UE4SS does not see them in gameplay. You will be warned if you pick one." -ForegroundColor Red
+Write-Host "NOTE: Alt / Ctrl / Shift CAN be used, but they need a small background" -ForegroundColor Yellow
+Write-Host "helper that the mod starts automatically. If the button does not respond" -ForegroundColor Yellow
+Write-Host "in game, restart the game once. If it still does not work, your system is" -ForegroundColor Yellow
+Write-Host "blocking the helper - pick a normal key like X or a mouse button instead." -ForegroundColor Yellow
 Write-Host ""
 
 # --- read existing values (defaults if missing) ---
