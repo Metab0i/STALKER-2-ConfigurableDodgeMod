@@ -43,7 +43,7 @@ function New-Package($name, $installerText, $includeRuntime) {
             Where-Object { $_.Name -match "^UE4SS\.(log|txt)$|UE4SS_ObjectDump|\.dmp$|\.cache$" } |
             Remove-Item -Force
         Get-ChildItem "$stage\ue4ss" -Recurse -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -match "\.log$|\.dmp$|_ObjectDump" } |
+            Where-Object { $_.Name -match "\.log$|\.dmp$|_ObjectDump|^\.hotreload$" } |
             Remove-Item -Force
 
         # redistribute the UE4SS compatibility fix's attribution files alongside
@@ -75,7 +75,7 @@ function New-Package($name, $installerText, $includeRuntime) {
 }
 
 $modOnlyText = @"
-SIMPLE DODGE (UE4SS script mod) v$Version
+CONFIGURABLE DODGE MOD (UE4SS script mod) v$Version
 =========================================
 
 REQUIRES: UE4SS already installed in Stalker2\Binaries\Win64\
@@ -86,26 +86,30 @@ INSTALL
 1. Copy the Configurable Dodge Mod folder into  Stalker2\Binaries\Win64\ue4ss\Mods\
 2. Add "ConfigurableDodgeMod : 1" to  Stalker2\Binaries\Win64\ue4ss\Mods\mods.txt
    (the mod id must have no spaces)
-3. Launch the game. Default: hold a movement key + press Mouse 5 = dodge.
+3. Launch the game. Default: hold A / D / S + press Left Alt = dodge.
    Run Setup.bat (in the mod folder) for an interactive setup, or edit
    ConfigurableDodgeMod.ini - changes apply live in about 2 seconds.
+   Modifier keys (Alt/Ctrl/Shift) and mouse buttons all work - a small
+   listener starts automatically with the game.
 
 
 Full readme: see README.md in this archive.
 "@
 
 $fullText = @"
-SIMPLE DODGE - FULL INSTALL (UE4SS included) v$Version
+CONFIGURABLE DODGE MOD - FULL INSTALL (UE4SS included) v$Version
 ======================================================
 
 This package includes a community-compatible UE4SS runtime for
-S.T.A.L.K.E.R. 2 Update 2.0+ plus the Configurable Dodge Mod mod, pre-configured.
+S.T.A.L.K.E.R. 2 Update 2.0+ plus the Configurable Dodge Mod, pre-configured.
 
 1. Copy everything from this archive into
    S.T.A.L.K.E.R. 2 Heart of Chornobyl\Stalker2\Binaries\Win64\
    (the folder with Stalker2-Win64-Shipping.exe)
 2. Launch the game.
-3. Double-tap Z = dodge left, C = dodge right, S = dodge back.
+3. Default: hold A / D / S + press Left Alt = dodge left / right / back.
+   Run Setup.bat in the mod folder to switch to double-tap mode or rebind.
+   Modifier keys and mouse buttons all work - the listener starts with the game.
 
 
 Full readme: see README.md in this archive.
