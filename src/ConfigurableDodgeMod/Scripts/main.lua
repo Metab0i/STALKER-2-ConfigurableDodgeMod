@@ -475,44 +475,38 @@ LoopAsync(60, function()
 end)
 
 
--- ================= modifier-key delivery (flag file) =================
--- UE4SS cannot see modifier keys (Alt) in gameplay. The shipped
--- LeftAltListener.ps1 (start via Listener.bat) watches Left Alt at the OS
--- level and writes a press counter to alt_press.txt in the mod root; this
--- loop converts new presses into dodges.
-local lastAltCount = nil
-LoopAsync(60, function()
-    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
-    if MODALITY ~= "button" or cfgPath == nil then return false end
-    local flagPath = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "alt_press.txt")
-    local content
-    pcall(function()
-        local h = io.open(flagPath, "r")
-        if h ~= nil then content = h:read("*a"); h:close() end
-    end)
-    local n = tonumber(Trim(content)) or 0
-    if lastAltCount == nil then lastAltCount = n; return false end
-    if n > lastAltCount then
-        lastAltCount = n
-        HandleButtonPress()
-        DevLog("alt flag press -> dodge attempt")
-    end
-    return false
-end)
 -- ================= boot =================
--- the MCM manager spawns per world; retry the AnyKey hooks until it exists
-LoopAsync(4000, function()
-    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
-    if not ANYKEY_HOOKED then HookAnyKeyEvents() end
-    return false
-end)
-
-print(string.format("[Configurable Dodge Mod] v2.0 loaded - mode: %s (%s), stamina cost %.0f",
-    MODALITY,
-    MODALITY == "button" and ("dodge button " .. KEY_DODGE_BTN) or ("double-tap " .. DT_LEFT .. "/" .. DT_RIGHT .. (ENABLE_BACK and ("/" .. DT_BACK) or "")),
-    STAMINA_COST))
-DevLog(string.format("boot v2.0 gen=%d mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
-
+-- modifier keys (Left Alt etc.) cannot be bound via UE4SS hooks; when one is
+-- configured, the mod binds the key's private F13-F24 channel instead and
+-- auto-starts the companion listener, which taps that F-key on each press
+local modifierButton = false
+do
+    local n = string.upper(string.gsub(KEY_DODGE_BTN, "[^%w]", ""))
+    if n == "LEFTALT" or n == "LALT" or n == "ALT" then KEY_DODGE_BTN = "F13"; modifierButton = true
+    elseif n == "RIGHTALT" or n == "RALT" then KEY_DODGE_BTN = "F14"; modifierButton = true
+    elseif n == "LEFTCONTROL" or n == "LCTRL" or n == "CTRL" then KEY_DODGE_BTN = "F15"; modifierButton = true
+    elseif n == "RIGHTCONTROL" or n == "RCTRL" then KEY_DODGE_BTN = "F16"; modifierButton = true
+    elseif n == "LEFTSHIFT" or n == "LSHIFT" or n == "SHIFT" then KEY_DODGE_BTN = "F17"; modifierButton = true
+    elseif n == "RIGHTSHIFT" or n == "RSHIFT" then KEY_DODGE_BTN = "F18"; modifierButton = true end
+end
+if MODALITY == "button" and modifierButton then
+    if cfgPath ~= nil and os ~= nil and type(os.execute) == "function" then
+        local listenerPath = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "ModifierListener.ps1")
+        pcall(function()
+            os.execute('start "DodgeModListener" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. listenerPath .. '"')
+        end)
+        print("[Configurable Dodge Mod] " .. KEY_DODGE_BTN .. " channel active (modifier listener auto-started)")
+        DevLog("modifier listener auto-started, bind=" .. KEY_DODGE_BTN)
+    end
+    -- boot-context bind of the private F-key (dofile-context binds never fire)
+    local k = keyNameToValue[KEY_DODGE_BTN]
+    if k ~= nil then
+        pcall(function()
+            RegisterKeyBind(k, function() DodgeMod_Dispatch("button", KEY_DODGE_BTN) end)
+        end)
+        DevLog("bound modifier channel: " .. KEY_DODGE_BTN)
+    end
+end
 -- ================= hot reload (dev only, .hotreload gated) =================
 -- watches main.lua AND the ini; either changing re-executes the mod
 if devEnabled and devDir ~= nil and cfgPath ~= nil then
@@ -582,3 +576,18 @@ DodgeMod_Handlers = function(role, keyUpper)
     end
 end
 DevLog("dispatcher wired gen=" .. tostring(DODGE_MOD_GEN))
+
+-- TEST: os.execute availability (for auto-starting the Alt listener)
+if devEnabled then
+    DevLog("probe: type(os.execute)=" .. type(os and os.execute))
+    local testFile = cfgPath and (string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "os_execute_test.txt")) or "os_execute_test.txt"
+    pcall(function()
+        os.execute('cmd /c echo ok > "' .. testFile .. '"')
+    end)
+    local content = nil
+    pcall(function()
+        local h = io.open(testFile, "r")
+        if h ~= nil then content = h:read("*a"); h:close() end
+    end)
+    DevLog("probe: os.execute wrote file: " .. tostring(content ~= nil))
+end
