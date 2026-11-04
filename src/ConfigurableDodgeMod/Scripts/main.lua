@@ -360,6 +360,22 @@ local MOUSE_ALIASES = {
 
 local function ResolveKey(displayName)
     if type(displayName) ~= "string" or displayName == "" then return nil end
+    -- Virtual-Key hex values (e.g. 0x58 = X, 0x05 = Mouse 4) bind directly.
+    -- MODIFIER VKs (0xA0-0xA5, 0x10-0x12: Alt/Ctrl/Shift) register but never
+    -- fire: they generate WM_SYSKEYDOWN which UE4SS does not process
+    -- (verified live, boot-context registration). Reject them loudly.
+    local hexv = string.match(string.upper(displayName), "^0X([0-9A-F][0-9A-F]?)$")
+    if hexv ~= nil then
+        local v = tonumber(hexv, 16)
+        if v ~= nil and v >= 1 and v <= 0xFE then
+            if (v >= 0xA0 and v <= 0xA5) or (v >= 0x10 and v <= 0x12) then
+                return nil, "modifier keys (Alt/Ctrl/Shift) generate WM_SYSKEYDOWN which UE4SS does not process"
+            end
+            return v
+        end
+        return nil
+    end
+    if type(displayName) ~= "string" or displayName == "" then return nil end
     local name = string.upper(displayName)
     local v = keyNameToValue[name]
     if v ~= nil then return v end
@@ -513,3 +529,15 @@ DodgeMod_Handlers = function(role, keyUpper)
     end
 end
 DevLog("dispatcher wired gen=" .. tostring(DODGE_MOD_GEN))
+
+-- TEST: does an Input table exist?
+if devEnabled then
+    DevLog("probe: type(Input)=" .. type(Input))
+    if type(Input) == "table" then
+        for _, n in ipairs({ "IsKeyPressed", "IsKeyDown", "GetKey", "WasKeyPressed" }) do
+            DevLog("probe: Input." .. n .. " = " .. type(Input[n]))
+        end
+        local ok, r = pcall(function() return Input.IsKeyPressed(0x58) end)
+        DevLog("probe: IsKeyPressed(0x58) -> " .. tostring(ok) .. " / " .. tostring(r))
+    end
+end
