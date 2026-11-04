@@ -193,7 +193,7 @@ while ($true) {
     Write-Host "Choose your dodge modality (only one can be active):" -ForegroundColor Cyan
     Write-Host "  1) Dodge button - hold a movement key, press a dodge button  [current: $($cur['Modality'])]"
     Write-Host "  2) Double-tap   - double-tap dodge keys (Z / C / S)          [current: $($cur['Modality'])]"
-    Write-Host "  3) Reset to defaults - button mode, Left Alt dodge button (current forces kept)"
+    Write-Host "  3) Reset to defaults - button mode, Left Alt, default forces"
     Clear-ConsoleInput
     $mode = Read-Host "1, 2 or 3 [Enter = keep $($cur['Modality'])]"
     if ([string]::IsNullOrWhiteSpace($mode)) { break }
@@ -206,6 +206,11 @@ while ($true) {
         $cur["DoubleTapRight"] = "C"
         $cur["DoubleTapBack"] = "S"
         $cur["DoubleTapWindow"] = "0.25"
+        $cur["SideHorizontal"] = "650"
+        $cur["SideVertical"] = "500"
+        $cur["BackHorizontal"] = "900"
+        $cur["BackVertical"] = "200"
+        $cur["StaminaCost"] = "20"
         $resetRequested = $true
         break
     }
@@ -236,7 +241,7 @@ if (-not $resetRequested) {
     $cur["StaminaCost"]    = Format-Number (Read-ValidNumber "Stamina cost"                $cur["StaminaCost"]    0 1000)
 } else {
     Write-Host ""
-    Write-Host "Reset to defaults: button mode, Left Alt dodge button. Current forces kept." -ForegroundColor Green
+    Write-Host "Reset to defaults: button mode, Left Alt dodge button, default forces." -ForegroundColor Green
 }
 
 $window = ConvertTo-Number $cur["DoubleTapWindow"]
