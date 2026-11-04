@@ -327,6 +327,12 @@ local function PollMCM(Manager)
                 end
             else
                 local v = FStr(s[POLL_FIELDS.Keybind])
+                -- sanitize: LMB/RMB/MMB can never be dodge buttons (UI navigation)
+                if sid == "Dodge Button Key" and BAD_MOUSE_NAMES[v] then
+                    s[POLL_FIELDS.Keybind] = "ThumbMouseButton2"
+                    v = "ThumbMouseButton2"
+                    DevLog("sanitized dodge button (UI mouse key) -> ThumbMouseButton2")
+                end
                 -- dev visibility: what the row holds right now (throttled)
                 if sid == "Dodge Button Key" and v ~= PollLastBtnLog then
                     PollLastBtnLog = v
@@ -556,6 +562,18 @@ end
 -- MCM stores, so a plain name comparison covers everything.
 local ANYKEY_HOOKED = false
 
+function ProbeAnyKeyFunctions()
+    for _, num in ipairs({ 5, 6, 7, 8, 15 }) do
+        local p = "/ModConfigurationMenu/BP_MCM_Manager.BP_MCM_Manager_C:InpActEvt_AnyKey_K2Node_InputKeyEvent_" .. num
+        local ok, f = pcall(function() return StaticFindObject(p) end)
+        if ok and f ~= nil and f:IsValid() then
+            local okn, fn = pcall(function() return f:GetFullName() end)
+            DevLog("anykey probe " .. num .. " FOUND: " .. tostring(fn))
+        else
+            DevLog("anykey probe " .. num .. " NOT FOUND")
+        end
+    end
+end
 function HookAnyKeyEvents()
     DevLog("HookAnyKeyEvents enter, hooked=" .. tostring(ANYKEY_HOOKED) .. " dev=" .. tostring(devEnabled))
     if ANYKEY_HOOKED then return end
@@ -575,10 +593,38 @@ function HookAnyKeyEvents()
             end)
         end)
         DevLog("anykey hook " .. num .. ": ok=" .. tostring(ok) .. (ok and "" or (" err=" .. tostring(err))))
-        if ok then ANYKEY_HOOKED = true end
+        ANYKEY_HOOKED = true -- attempted; failed stubs are not hookable, do not retry
     end
 end
 
+-- movement double-tap: dodge by double-tapping a movement direction (the
+-- game's own bindings - A/A, D/D, S/S by default). Read from the live
+-- movement input, so it follows rebinding and needs no key hooks.
+local moveTap  = { left = 0.0, right = 0.0, back = 0.0 }
+local moveHold = { left = false, right = false, back = false }
+
+LoopAsync(60, function()
+    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
+    if not DOUBLE_TAP_ENABLED then return false end
+    local d = GetMoveInputDirection()
+    for _, dir in ipairs({ "left", "right", "back" }) do
+        if d == dir then
+            if not moveHold[dir] then
+                moveHold[dir] = true
+                local t = Now()
+                if t - moveTap[dir] <= DOUBLE_TAP_WINDOW then
+                    moveTap[dir] = 0.0
+                    DoDodge(dir)
+                else
+                    moveTap[dir] = t
+                end
+            end
+        else
+            moveHold[dir] = false
+        end
+    end
+    return false
+end)
 function DodgeMod_Dispatch(role, keyUpper)
     if devEnabled then DevLog("dispatch role=" .. tostring(role) .. " key=" .. tostring(keyUpper)) end
     local H = DodgeMod_Handlers
@@ -587,6 +633,9 @@ function DodgeMod_Dispatch(role, keyUpper)
 end
 
 -- mouse button keys and the engine display names MCM stores for them
+-- ALL mouse buttons are capturable. The capture only arms ~400 ms after the
+-- row's listening transition, so the click that OPENS the field can never
+-- bind itself, and accidental UI clicks right after opening are ignored too.
 MOUSE_BY_KEY = {
     XBUTTON_ONE         = "ThumbMouseButton",
     XBUTTON_TWO         = "ThumbMouseButton2",
@@ -594,6 +643,8 @@ MOUSE_BY_KEY = {
     RIGHT_MOUSE_BUTTON  = "RightMouseButton",
     MIDDLE_MOUSE_BUTTON = "MiddleMouseButton",
 }
+-- garbage values that must never stay bound (sanitize on poll)
+BAD_MOUSE_NAMES = { LeftMouseButton = true, RightMouseButton = true, MiddleMouseButton = true }
 MOUSE_DISPLAY_NAMES = {}
 for _, d in pairs(MOUSE_BY_KEY) do MOUSE_DISPLAY_NAMES[d] = true end
 
@@ -733,15 +784,14 @@ local function BindMouseToDodge(mouseKey, row)
 end
 
 --- called on every mouse-button press. Gameplay: straight to the dodge
---- decision, no MCM reads at all. MCM menu (cursor visible): capture path.
-local lastListeningState = false
-local listeningSince = 0.0
-
+--- decision, no MCM reads at all. MCM menu: capture path - the press only
+--- binds once the capture state is ARMED (>= 400 ms after the row started
+--- listening), so the opening click and instant double-clicks never bind.
 function OnMouseCapturePress(mouseKey)
     local inUI = false
     pcall(function()
         local PC = GetPC()
-        if PC:IsValid() then inUI = PC.bShowMouseCursor end
+        if PC ~= nil and PC:IsValid() then inUI = PC.bShowMouseCursor end
     end)
     if not inUI then
         local displayName = MOUSE_BY_KEY[mouseKey]
@@ -752,46 +802,45 @@ function OnMouseCapturePress(mouseKey)
         return
     end
 
-    local row = GetDodgeRow()
-    local listening = false
-    if row ~= nil then
-        pcall(function() listening = row.ListeningToKey end)
-    end
-    if listening then
-        if not lastListeningState then
-            lastListeningState = true
-            listeningSince = Now()
-            return
-        end
-        if Now() - listeningSince < 0.25 then return end
+    if lastListeningState and captureArmedAt ~= nil and Now() >= captureArmedAt then
+        local row = GetDodgeRow()
         if row ~= nil then
             BindMouseToDodge(mouseKey, row)
+            return
         end
-        return
     end
-    lastListeningState = false
-    local displayName = MOUSE_BY_KEY[mouseKey]
-    if displayName ~= nil and displayName == KEY_DODGE_BTN then
-        HandleButtonPress()
-    end
+    DevLog(string.format("mouse %s ignored (listening=%s armed=%s)",
+        tostring(mouseKey), tostring(lastListeningState), tostring(captureArmedAt ~= nil and Now() >= captureArmedAt)))
 end
-
 --- keep the capture-start timestamp fresh without per-press reads
+--- capture arming state machine (owned by this poll; the press handler only
+--- consults it). The row starts listening at the INSTANT of the opening
+--- click, so a bind is only accepted once the listening state has been
+--- stable for ARM_DELAY - the opening click itself can never bind.
+local captureArmedAt = nil
+
 LoopAsync(150, function()
     if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
     local row = dodgeRowWidget
-    if row == nil then return false end
-    local okValid, valid = pcall(function() return row:IsValid() end)
-    if not okValid or not valid then
-        dodgeRowWidget = nil
-        lastListeningState = false
-        return false
-    end
     local listening = false
-    pcall(function() listening = row.ListeningToKey end)
+    if row ~= nil then
+        local okValid, valid = pcall(function() return row:IsValid() end)
+        if okValid and valid then
+            pcall(function() listening = row.ListeningToKey end)
+        else
+            dodgeRowWidget = nil
+        end
+    end
     local t = Now()
-    if listening and not lastListeningState then
-        listeningSince = t
+    if listening then
+        if lastListeningState == false then
+            -- transition just observed: arm capture after a short grace delay
+            captureArmedAt = t + 0.4
+        end
+    else
+        if lastListeningState == true then
+            captureArmedAt = nil
+        end
     end
     lastListeningState = listening
     return false
@@ -799,6 +848,7 @@ end)
 
 -- ================= MCM manager loop (generation-guarded) =================
 
+ProbeAnyKeyFunctions()
 HookAnyKeyEvents()
 
 -- mouse bindings (boot context): MCM capture + gameplay dodge
