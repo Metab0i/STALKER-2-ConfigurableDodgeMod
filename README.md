@@ -51,6 +51,9 @@ Changes to the ini apply **live within ~2 seconds** — no restart.
 
 - Each dodge costs 20 SP (vanilla jump); dodging is blocked at low stamina
 - Dodging is disabled while the game is in a menu/dialog (stash, conversations)
+- Modifier keys (Alt/Ctrl/Shift) as the dodge button: run Listener.bat once per
+  session (ships with the mod) - it watches Left Alt at the OS level and feeds
+  presses to the mod; auto-exits when the game closes
 - Mouse buttons are the recommended dodge buttons: keyboard-button delivery
   depends on UE4SS's input hook and can be unreliable after loading a world
 
