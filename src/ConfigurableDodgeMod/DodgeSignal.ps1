@@ -1,9 +1,15 @@
-# Configurable Dodge Mod - input listener (v5)
+# Configurable Dodge Mod - input listener (v6)
 # Owns ALL key-binding logic: watches the keys configured in
 # ConfigurableDodgeMod.ini at the OS level (GetAsyncKeyState - sees every
 # key, including modifiers that UE4SS cannot), performs the double-tap
-# detection, and streams the resulting press counters to the mod through a
-# named pipe (pure memory - nothing touches the disk).
+# detection, and streams press counters to the mod through a named pipe
+# (kernel memory - nothing touches the disk).
+#
+# Lifetime is tied to the game by a process handle: the listener opens the
+# game process with SYNCHRONIZE rights and blocks on it - when the game
+# terminates, the wait signals and the listener exits. No polling of
+# process liveness anywhere.
+#
 # Started automatically by the mod at game boot. Exits when the game closes.
 
 Add-Type @"
@@ -14,6 +20,9 @@ public static class SigListen {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
     [DllImport("kernel32.dll")] public static extern bool CreateMutex(IntPtr attr, bool initial, string name);
+    [DllImport("kernel32.dll")] public static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+    [DllImport("kernel32.dll")] public static extern uint WaitForSingleObject(IntPtr h, uint ms);
+    [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);
 }
 "@
 
@@ -67,7 +76,16 @@ function Resolve-VK([string]$name) {
 $counters = @{ btn = 0; dtl = 0; dtr = 0; dtb = 0 }
 $held = @{}
 $lastTap = @{}
+$iniReadAt = [Diagnostics.Stopwatch]::StartNew()
 $gamePid = 0
+$hGame = [IntPtr]::Zero
+
+function Find-GamePid {
+    $p = Get-Process Stalker2-Win64-Shipping -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $p) { $p = Get-Process Stalker2 -ErrorAction SilentlyContinue | Select-Object -First 1 }
+    if ($p) { return [int]$p.Id }
+    return 0
+}
 
 function Update-Keys {
     # resolve current VKs from config
@@ -90,7 +108,6 @@ function Update-Keys {
         return
     }
 
-    $t = [Diagnostics.Stopwatch]::StartNew()
     if ($cur["Modality"] -eq "button") {
         if ($btnVK -ne $null) {
             $down = (([SigListen]::GetAsyncKeyState($btnVK) -band 0x8000) -ne 0)
@@ -124,28 +141,44 @@ function Update-Keys {
     }
 }
 
-# find the game process id once it exists
-function Find-GamePid {
-    $p = Get-Process Stalker2-Win64-Shipping -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $p) { $p = Get-Process Stalker2 -ErrorAction SilentlyContinue | Select-Object -First 1 }
-    if ($p) { return [int]$p.Id }
-    return 0
+# ================= lifetime: tied to the game process =================
+# wait for the game to exist (pre-game only), then open a SYNCHRONIZE
+# handle: WaitForSingleObject on it signals the instant the game dies
+while ($hGame -eq [IntPtr]::Zero) {
+    $gamePid = Find-GamePid
+    if ($gamePid -ne 0) {
+        $hGame = [SigListen]::OpenProcess(0x00100000, $false, $gamePid)  # PROCESS_SYNCHRONIZE
+        if ($hGame -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 500; $gamePid = 0 }
+    } else {
+        Start-Sleep -Milliseconds 500
+    }
 }
+Write-Host "Dodge input listener running (modality: $($cur['Modality']), game pid $gamePid)."
+Write-Host "Exits automatically when the game terminates."
 
-$gamePid = Find-GamePid
-Write-Host "Dodge input listener running (modality: $($cur['Modality']))."
-Write-Host "Auto-exits when the game closes."
-
-# ================= pipe server =================
+# ================= main loop =================
 while ($true) {
-    if ($gamePid -eq 0) { $gamePid = Find-GamePid }
+    # game terminated? (kernel wait, zero cost - signals immediately on exit)
+    if ([SigListen]::WaitForSingleObject($hGame, 0) -eq 0) { break }
+
+    # live config: re-read the ini every ~2 s
+    if ($iniReadAt.ElapsedMilliseconds -gt 2000) {
+        $iniReadAt.Restart()
+        Read-Ini
+    }
+
+    # one service cycle: key polling + pipe write
     $server = New-Object System.IO.Pipes.NamedPipeServerStream("DodgeModSignal", [System.IO.Pipes.PipeDirection]::Out)
     try {
-        $server.WaitForConnection()
+        # async wait with timeout so this cycle stays bounded
+        $waitTask = $server.WaitForConnectionAsync()
+        if (-not $waitTask.Wait(120)) { continue }
+
         $writer = New-Object System.IO.StreamWriter($server)
         $writer.AutoFlush = $true
         while ($true) {
-            Read-Ini
+            if ([SigListen]::WaitForSingleObject($hGame, 0) -eq 0) { break }   # game died
+            if ($iniReadAt.ElapsedMilliseconds -gt 2000) { $iniReadAt.Restart(); Read-Ini }
             Update-Keys
             $state = "btn=$($counters['btn']) dtl=$($counters['dtl']) dtr=$($counters['dtr']) dtb=$($counters['dtb'])"
             $writer.WriteLine($state)
@@ -157,7 +190,9 @@ while ($true) {
         if ($writer) { $writer.Dispose() }
         $server.Dispose()
     }
-    if ($gamePid -ne 0 -and -not (Get-Process -Id $gamePid -ErrorAction SilentlyContinue)) { $gamePid = Find-GamePid }
-    if ($gamePid -eq 0 -and -not (Get-Process Stalker2* -ErrorAction SilentlyContinue)) { break }
-    Start-Sleep -Milliseconds 30
+
+    if ([SigListen]::WaitForSingleObject($hGame, 0) -eq 0) { break }   # game died mid-cycle
+    Start-Sleep -Milliseconds 20
 }
+
+[SigListen]::CloseHandle($hGame) | Out-Null

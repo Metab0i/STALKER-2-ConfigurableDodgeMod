@@ -419,6 +419,8 @@ print(string.format("[Configurable Dodge Mod] v2.2 loaded - mode: %s (%s), stami
 DevLog(string.format("boot v2.2 gen=%d mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
 
 -- ================= hot reload (dev only, .hotreload gated) =================
+DodgeMod_BootComplete = DODGE_MOD_GEN
+DodgeMod_Handlers = function() end  -- legacy: re-pointed so old watchers see a handover
 -- watches main.lua AND the ini; either changing re-executes the mod
 if devEnabled and devDir ~= nil and cfgPath ~= nil then
     local sep = (string.find(devDir, "\\", 1, true) ~= nil) and "\\" or "/"
@@ -443,7 +445,7 @@ if devEnabled and devDir ~= nil and cfgPath ~= nil then
         DodgeMod_Generation = DODGE_MOD_GEN + 1
         local oldHandlers = DodgeMod_Handlers
         local okR, errR = pcall(dofile, selfPath)
-        if not okR or DodgeMod_Handlers == oldHandlers then
+        if not okR or DodgeMod_BootComplete ~= DodgeMod_Generation then
             if not okR then DevLog("RELOAD ERROR: " .. tostring(errR)) else DevLog("RELOAD ERROR: chunk did not finish booting") end
             DodgeMod_Generation = DODGE_MOD_GEN
             return false
