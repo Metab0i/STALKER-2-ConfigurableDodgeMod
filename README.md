@@ -26,7 +26,7 @@ Mod Configuration Menu.
 
 1. Copy the `ConfigurableDodgeMod` folder to `Stalker2\Binaries\Win64\ue4ss\Mods\`
 2. Add `ConfigurableDodgeMod : 1` to `ue4ss\Mods\mods.txt` (no spaces in the mod id)
-3. Launch. Default: hold a movement key and press **Mouse 5** to dodge.
+3. Launch. Default: hold a movement key and press **Left Alt** to dodge.
 
 No MCM needed — the mod is configured entirely through a plain ini file.
 

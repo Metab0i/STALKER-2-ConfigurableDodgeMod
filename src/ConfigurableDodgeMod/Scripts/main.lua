@@ -432,38 +432,6 @@ LoopAsync(50, function()
     return false
 end)
 
--- ================= movement double-tap (doubletap modality bonus) =========
--- double-tapping a movement direction itself dodges (A/A, D/D, S/S) - read
--- from the live movement input, so it follows the game's bindings
-local moveTap  = { left = 0.0, right = 0.0, back = 0.0 }
-local moveHold = { left = false, right = false, back = false }
-
-LoopAsync(60, function()
-    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
-    local ok, err = pcall(function()
-        if MODALITY ~= "doubletap" then return end
-        local d = GetMoveInputDirection()
-        for _, dir in ipairs({ "left", "right", "back" }) do
-            if d == dir then
-                if not moveHold[dir] then
-                    moveHold[dir] = true
-                    local t = Now()
-                    if t - moveTap[dir] <= DOUBLE_TAP_WINDOW then
-                        moveTap[dir] = 0.0
-                        DoDodge(dir)
-                    else
-                        moveTap[dir] = t
-                    end
-                end
-            else
-                moveHold[dir] = false
-            end
-        end
-    end)
-    if not ok then DevLog("movement tap error: " .. tostring(err)) end
-    return false
-end)
-
 -- ================= auto-start the signal listener =================
 -- (os.execute verified available; the listener is mutex-guarded, so double
 -- spawns are harmless, and it auto-exits when the game closes)

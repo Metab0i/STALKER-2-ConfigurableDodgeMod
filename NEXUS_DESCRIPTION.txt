@@ -1,5 +1,5 @@
 [size=4][b]Description[/b][/size][size=3][color=#D4D4D8]
-Configurable Dodge Mod adds a proper dodge to S.T.A.L.K.E.R. 2. Hold a movement key and press your dodge button (Left Alt by default) - or double-tap a movement direction - and Skif hops out of the way, left, right or backwards, relative to wherever you are looking. Every force value and every keybind is configurable live in a plain ini file (interactive Setup.bat included; no MCM needed), and each dodge costs stamina through the game's own vitals system (same cost as a vanilla jump), so it plays by the Zone's rules instead of being a free escape button.
+Configurable Dodge Mod adds a proper dodge to S.T.A.L.K.E.R. 2. Hold a movement key and press your dodge button (Left Alt by default) - or double-tap your dodge keys - and Skif hops out of the way, left, right or backwards, relative to wherever you are looking. Every force value and every keybind is configurable live in a plain ini file (interactive Setup.bat included; no MCM needed), and each dodge costs stamina through the game's own vitals system (same cost as a vanilla jump), so it plays by the Zone's rules instead of being a free escape button.
 
 This is a from-scratch rebuild of the classic Dodge mod concept for game update 2.0+, implemented as an UE4SS script mod.[/color][/size]
 
