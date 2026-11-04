@@ -27,9 +27,9 @@ This is a from-scratch rebuild of the classic Dodge mod concept for game update 
 [*][size=3][color=#D4D4D8]Separate horizontal and vertical force values for side dodges and back dodges[/color][/size][/*]
 [*][size=3][color=#D4D4D8]Stamina cost per dodge (vanilla jump cost by default) - applied through the game's native vitals API so the HUD updates properly[/color][/size][/*]
 [*][size=3][color=#D4D4D8]Dodging is blocked when you lack the stamina for it (toggleable)[/color][/size][/*]
-[*][size=3][color=#D4D4D8]All values exposed in the Mod Configuration Menu under [b]Configurable Dodge Mod[/b]: the "Force" category (Side Dodge Horizontal/Vertical Force, Back Dodge Horizontal/Vertical Force, Jump Stamina Cost) and the "Keybinds" category (Double-Tap Dodge Left/Right/Back Key)[/color][/size][/*]
-[*][size=3][color=#D4D4D8]MCM changes apply live - no restart needed; keybind changes rebind on the fly, even mid-combat[/color][/size][/*]
-[*][size=3][color=#D4D4D8]MCM is optional - without it the mod runs on sensible defaults[/color][/size][/*]
+[*][size=3][color=#D4D4D8]All values configured via a plain ini file (interactive Setup.bat included)[b]: the "Force" category (Side Dodge Horizontal/Vertical Force, Back Dodge Horizontal/Vertical Force, Jump Stamina Cost) and the "Keybinds" category (Double-Tap Dodge Left/Right/Back Key)[/color][/size][/*]
+[*][size=3][color=#D4D4D8]ini changes apply live in ~2 seconds - no restart needed; mid-combat[/color][/size][/*]
+[*][size=3][color=#D4D4D8]No MCM needed at all - plain ini config, zero dependencies beyond UE4SS[/color][/size][/*]
 [/list]
 
 [size=4][b]Requirements[/b][/size]

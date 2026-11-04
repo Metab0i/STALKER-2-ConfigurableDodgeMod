@@ -1,4 +1,4 @@
-﻿# Configurable Dodge Mod for S.T.A.L.K.E.R. 2
+# Configurable Dodge Mod for S.T.A.L.K.E.R. 2
 
 ![Configurable Dodge Mod thumbnail](media/main.png)
 
@@ -6,11 +6,8 @@ Double-tap **Z** (left), **C** (right) or **S** (back) and Skif hops out of the
 way. Values (dodge strengths, stamina cost, keys) are configurable in the
 Mod Configuration Menu.
 
-![MCM settings - full view](media/mcm-full.png)
 
-![Force settings](media/mcm-force.png)
 
-![Keybinds settings](media/mcm-keybinds.png)
 
 ## Demo
 
@@ -28,25 +25,34 @@ Mod Configuration Menu.
 ## Install
 
 1. Copy the `ConfigurableDodgeMod` folder to `Stalker2\Binaries\Win64\ue4ss\Mods\`
-2. Add `ConfigurableDodgeMod : 1` to `ue4ss\Mods\mods.txt`
-3. Launch. Hold a movement key and press **Mouse 5** to dodge (double-tap `Z` / `C` / `S` also works).
+2. Add `ConfigurableDodgeMod : 1` to `ue4ss\Mods\mods.txt` (no spaces in the mod id)
+3. Launch. Default: hold a movement key and press **Mouse 5** to dodge.
+
+No MCM needed — the mod is configured entirely through a plain ini file.
 
 ## Configure
 
-Press your MCM key in game → open **Configurable Dodge Mod**.
-Settings apply live while the game runs.
+Run **`Setup.bat`** (in the mod folder) for an interactive setup — it asks for
+your dodge modality (button or double-tap, one at a time), captures keys, and
+writes the config. Or edit **`ConfigurableDodgeMod.ini`** directly:
 
-- **Dodge Button Key**: the button pressed together with a movement key
-  (default `Mouse 5`). The capture field accepts mouse buttons — side
-  buttons are the recommended dodge buttons, since keyboard-button delivery
-  depends on UE4SS's input hook and can be unreliable after loading a world.
-- Dodge strengths, stamina cost, and the double-tap keys are all in MCM too.
+- `Modality` = `button` (hold movement key + press the dodge button) or
+  `doubletap` (double-tap the dodge keys) — only one is active
+- `ButtonKey` — the dodge button (default `ThumbMouseButton2` = Mouse 5;
+  note engine modifiers like Left Alt cannot be bound)
+- `DoubleTapLeft/Right/Back` — the double-tap keys (default `Z` / `C` / `S`)
+- Dodge forces and stamina cost
+
+**Key name reference:** https://ue4ss.org/data-complex/coding-standard#a-name-usage
+
+Changes to the ini apply **live within ~2 seconds** — no restart.
 
 ## Notes
 
 - Each dodge costs 20 SP (vanilla jump); dodging is blocked at low stamina
 - Dodging is disabled while the game is in a menu/dialog (stash, conversations)
-- If MCM settings don't appear at first, save the game once and load that save
+- Mouse buttons are the recommended dodge buttons: keyboard-button delivery
+  depends on UE4SS's input hook and can be unreliable after loading a world
 
 ## Credits
 

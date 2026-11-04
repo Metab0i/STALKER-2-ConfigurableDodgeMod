@@ -2,7 +2,7 @@
 #   Configurable Dodge Mod_<ver>_mod-only.zip : just the script mod (requires the user to already have UE4SS)
 #   Configurable Dodge Mod_<ver>_full.zip     : the script mod + a complete UE4SS runtime (dwmapi.dll etc.)
 param(
-    [string]$Version = "1.5"
+    [string]$Version = "2.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -84,12 +84,12 @@ REQUIRES: UE4SS already installed in Stalker2\Binaries\Win64\
 
 INSTALL
 1. Copy the Configurable Dodge Mod folder into  Stalker2\Binaries\Win64\ue4ss\Mods\
-2. Add "Configurable Dodge Mod : 1" to  Stalker2\Binaries\Win64\ue4ss\Mods\mods.txt
-   (or edit the existing Configurable Dodge Mod line to end with : 1)
-3. Launch the game. Double-tap Z = dodge left, C = dodge right, S = dodge back.
+2. Add "ConfigurableDodgeMod : 1" to  Stalker2\Binaries\Win64\ue4ss\Mods\mods.txt
+   (the mod id must have no spaces)
+3. Launch the game. Default: hold a movement key + press Mouse 5 = dodge.
+   Run Setup.bat (in the mod folder) for an interactive setup, or edit
+   ConfigurableDodgeMod.ini - changes apply live in about 2 seconds.
 
-If you use the Mod Configuration Menu, configure Configurable Dodge Mod in MCM
-(press the MCM key, open Configurable Dodge Mod).
 
 Full readme: see README.md in this archive.
 "@
@@ -107,8 +107,6 @@ S.T.A.L.K.E.R. 2 Update 2.0+ plus the Configurable Dodge Mod mod, pre-configured
 2. Launch the game.
 3. Double-tap Z = dodge left, C = dodge right, S = dodge back.
 
-If you use the Mod Configuration Menu, configure Configurable Dodge Mod in MCM
-(press the MCM key, open Configurable Dodge Mod).
 
 Full readme: see README.md in this archive.
 "@
