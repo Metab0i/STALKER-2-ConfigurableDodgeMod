@@ -81,6 +81,7 @@ $counters = @{ btn = 0; dtl = 0; dtr = 0; dtb = 0 }
 $held = @{}
 $lastTap = @{}
 $iniReadAt = [Diagnostics.Stopwatch]::StartNew()
+$pressClock = [Diagnostics.Stopwatch]::StartNew()   # one clock for double-tap timing
 $gamePid = 0
 $hGame = [IntPtr]::Zero
 
@@ -129,15 +130,16 @@ function Update-Keys {
             $key = "dt$vk"
             $down = (([SigListen]::GetAsyncKeyState($vk) -band 0x8000) -ne 0)
             if ($down -and -not $held[$key]) {
-                $nowMs = [Diagnostics.Stopwatch]::StartNew()
+                # a FRESH stopwatch per press made elapsed ~0, so every single
+                # press counted as a double-tap; use one shared clock
+                $nowSec = $pressClock.Elapsed.TotalSeconds
                 $last = 0.0
                 if ($lastTap[$d[0]] -ne $null) { $last = $lastTap[$d[0]] }
-                $elapsed = ($nowMs.Elapsed.TotalSeconds) - $last
-                if ($elapsed -le $windowSec) {
+                if ($last -gt 0.0 -and ($nowSec - $last) -le $windowSec) {
                     $counters[$d[0]]++
                     $lastTap[$d[0]] = 0.0
                 } else {
-                    $lastTap[$d[0]] = $nowMs.Elapsed.TotalSeconds
+                    $lastTap[$d[0]] = $nowSec
                 }
             }
             $held[$key] = $down
