@@ -208,11 +208,20 @@ end
 
 local function DoDodge(direction)
     local dodgeT0 = Now()
-    if Now() - lastDodge < COOLDOWN then return end
+    if Now() - lastDodge < COOLDOWN then
+        DevLog(string.format("press ignored: cooldown (%.2fs left)", COOLDOWN - (Now() - lastDodge)))
+        return
+    end
     local PC = GetPC()
-    if PC == nil then return end
+    if PC == nil then
+        DevLog("press ignored: no player controller")
+        return
+    end
     local Pawn = PC.Pawn
-    if Pawn == nil or not Pawn:IsValid() then return end
+    if Pawn == nil or not Pawn:IsValid() then
+        DevLog("press ignored: no pawn")
+        return
+    end
 
     -- no dodging while gameplay is UI-blocked (stash, conversations, pause)
     local blocked = false
@@ -225,7 +234,10 @@ local function DoDodge(direction)
     end
 
     local Velocity = BuildLaunchVector(direction)
-    if Velocity == nil then return end
+    if Velocity == nil then
+        DevLog("press ignored: could not build launch vector")
+        return
+    end
 
     if not SpendStamina(Pawn) then
         return
@@ -321,19 +333,32 @@ end
 -- A counter increase = a (double-)tap completed in the listener; we dodge.
 local signalLast = {}
 local signalMissingNoticed = false
+local signalReads = 0
 
-LoopAsync(50, function()
-    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
-    if signalPath == nil then return false end
+-- Read one state line from the pipe. The listener serves one connection per
+-- poll (write + disconnect), so a connect can race the re-listen window; a
+-- second attempt in the same tick covers that.
+local function ReadSignalLine()
     local content
+    -- NOTE: read("*l"), not read("*a") - the C runtime rejects the
+    -- "copy to EOF" read on Windows named pipes (EINVAL), while a single
+    -- line read works. The listener writes one line per connection.
     pcall(function()
         local h = io.open(signalPath, "r")
-        -- NOTE: read("*l"), not read("*a") - the C runtime rejects the
-        -- "copy to EOF" read on Windows named pipes (EINVAL), while a
-        -- single line read works. The listener writes one line per
-        -- connection and disconnects (EOF).
         if h ~= nil then content = h:read("*l"); h:close() end
     end)
+    if content == nil then
+        pcall(function()
+            local h = io.open(signalPath, "r")
+            if h ~= nil then content = h:read("*l"); h:close() end
+        end)
+    end
+    return content
+end
+
+local function SignalStep()
+    if signalPath == nil then return end
+    local content = ReadSignalLine()
     if content == nil then
         -- listener not running (or starting up): inform once after a grace period
         if not signalMissingNoticed and GetPC() ~= nil and Now() > 15.0 then
@@ -347,9 +372,10 @@ LoopAsync(50, function()
                 end
             end)
         end
-        return false
+        return
     end
     signalMissingNoticed = false
+    signalReads = signalReads + 1
 
     -- the listener sends all counters on one line ("btn=N dtl=N dtr=N dtb=N"),
     -- so split on whitespace and parse each token
@@ -360,6 +386,11 @@ LoopAsync(50, function()
             local last = signalLast[k]
             if last == nil then
                 signalLast[k] = n
+            elseif n < last then
+                -- the listener restarted and its counters reset: re-baseline
+                -- instead of ignoring every value until the old high is passed
+                signalLast[k] = n
+                DevLog("signal counters reset (" .. k .. ")")
             elseif n > last then
                 signalLast[k] = n
                 if k == "btn" and MODALITY == "button" then
@@ -374,6 +405,16 @@ LoopAsync(50, function()
             end
         end
     end
+end
+
+-- IMPORTANT: the whole step is pcall'd every tick. An uncaught error inside a
+-- LoopAsync callback stops that loop permanently (this silently disabled
+-- dodging for a whole session before), so errors are logged and the loop
+-- keeps running.
+LoopAsync(50, function()
+    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
+    local ok, err = pcall(SignalStep)
+    if not ok then DevLog("signal poll error: " .. tostring(err)) end
     return false
 end)
 
@@ -385,24 +426,27 @@ local moveHold = { left = false, right = false, back = false }
 
 LoopAsync(60, function()
     if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
-    if MODALITY ~= "doubletap" then return false end
-    local d = GetMoveInputDirection()
-    for _, dir in ipairs({ "left", "right", "back" }) do
-        if d == dir then
-            if not moveHold[dir] then
-                moveHold[dir] = true
-                local t = Now()
-                if t - moveTap[dir] <= DOUBLE_TAP_WINDOW then
-                    moveTap[dir] = 0.0
-                    DoDodge(dir)
-                else
-                    moveTap[dir] = t
+    local ok, err = pcall(function()
+        if MODALITY ~= "doubletap" then return end
+        local d = GetMoveInputDirection()
+        for _, dir in ipairs({ "left", "right", "back" }) do
+            if d == dir then
+                if not moveHold[dir] then
+                    moveHold[dir] = true
+                    local t = Now()
+                    if t - moveTap[dir] <= DOUBLE_TAP_WINDOW then
+                        moveTap[dir] = 0.0
+                        DoDodge(dir)
+                    else
+                        moveTap[dir] = t
+                    end
                 end
+            else
+                moveHold[dir] = false
             end
-        else
-            moveHold[dir] = false
         end
-    end
+    end)
+    if not ok then DevLog("movement tap error: " .. tostring(err)) end
     return false
 end)
 
@@ -430,18 +474,21 @@ DevLog(string.format("boot v2.2 gen=%d mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GE
 if cfgPath ~= nil then
     LoopAsync(2000, function()
         if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
-        local newIni
-        pcall(function()
-            local h = io.open(cfgPath, "rb")
-            if h ~= nil then newIni = h:read("*a"); h:close() end
+        local ok, err = pcall(function()
+            local newIni
+            pcall(function()
+                local h = io.open(cfgPath, "rb")
+                if h ~= nil then newIni = h:read("*a"); h:close() end
+            end)
+            if newIni ~= nil and newIni ~= iniContent then
+                iniContent = newIni
+                ApplyConfig(newIni)
+                DevLog("ini reloaded: mode=" .. MODALITY .. " btn=" .. KEY_DODGE_BTN)
+                print(string.format("[Configurable Dodge Mod] ini reloaded - mode %s, dodge button %s, stamina %.0f",
+                    MODALITY, MODALITY == "button" and KEY_DODGE_BTN or (DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK), STAMINA_COST))
+            end
         end)
-        if newIni ~= nil and newIni ~= iniContent then
-            iniContent = newIni
-            ApplyConfig(newIni)
-            DevLog("ini reloaded: mode=" .. MODALITY .. " btn=" .. KEY_DODGE_BTN)
-            print(string.format("[Configurable Dodge Mod] ini reloaded - mode %s, dodge button %s, stamina %.0f",
-                MODALITY, MODALITY == "button" and KEY_DODGE_BTN or (DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK), STAMINA_COST))
-        end
+        if not ok then DevLog("ini watcher error: " .. tostring(err)) end
         return false
     end)
 end

@@ -98,6 +98,16 @@ function Capture-KeyOrMouse([string]$default, [string]$label) {
     }
 }
 
+# Discard keys that are already queued in the console input buffer. Captured
+# key presses are real keystrokes, so without this the key used to pick the
+# dodge button would be typed into the next prompt (and Enter would answer it
+# with an empty line). Harmless when input is redirected.
+function Clear-ConsoleInput {
+    Start-Sleep -Milliseconds 50   # let the input queue settle
+    try {
+        while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
+    } catch { }
+}
 # ================= numeric input with validation =================
 function ConvertTo-Number([string]$text) {
     $value = 0.0
@@ -107,6 +117,7 @@ function ConvertTo-Number([string]$text) {
 
 function Read-ValidNumber([string]$label, [string]$current, [double]$min, [double]$max) {
     while ($true) {
+        Clear-ConsoleInput
         $entered = Read-Host "  $label [$current]"
         if ([string]::IsNullOrWhiteSpace($entered)) {
             $value = ConvertTo-Number $current
@@ -157,6 +168,7 @@ while ($true) {
     Write-Host "Choose your dodge modality (only one can be active):" -ForegroundColor Cyan
     Write-Host "  1) Dodge button - hold a movement key, press a dodge button  [current: $($cur['Modality'])]"
     Write-Host "  2) Double-tap   - double-tap dodge keys (Z / C / S)          [current: $($cur['Modality'])]"
+    Clear-ConsoleInput
     $mode = Read-Host "1 or 2 [Enter = keep $($cur['Modality'])]"
     if ([string]::IsNullOrWhiteSpace($mode)) { break }
     if ($mode.Trim() -eq "1") { $cur["Modality"] = "button"; break }
@@ -167,10 +179,14 @@ while ($true) {
 # --- keys (captured, not typed) ---
 if ($cur["Modality"] -eq "button") {
     $cur["ButtonKey"] = Capture-KeyOrMouse $cur["ButtonKey"] "DODGE BUTTON - hold a movement key + press this to dodge:"
+    Clear-ConsoleInput
 } else {
     $cur["DoubleTapLeft"]  = Capture-KeyOrMouse $cur["DoubleTapLeft"]  "DOUBLE-TAP LEFT key:"
+    Clear-ConsoleInput
     $cur["DoubleTapRight"] = Capture-KeyOrMouse $cur["DoubleTapRight"] "DOUBLE-TAP RIGHT key:"
+    Clear-ConsoleInput
     $cur["DoubleTapBack"]  = Capture-KeyOrMouse $cur["DoubleTapBack"]  "DOUBLE-TAP BACK key:"
+    Clear-ConsoleInput
 }
 
 # --- forces + stamina (validated) ---
