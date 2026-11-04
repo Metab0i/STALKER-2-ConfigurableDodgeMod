@@ -69,7 +69,7 @@ function Get-VKName([int]$vk) {
 function Capture-KeyOrMouse([string]$default, [string]$label) {
     Write-Host ""
     Write-Host "  $label" -ForegroundColor Cyan
-    Write-Host "  Press the key or mouse button now. Enter = keep '$default', Esc = cancel."
+    Write-Host "  Press the key or mouse button now. Enter = keep '$(Format-KeyDisplay $default)', Esc = cancel."
 
     # Snapshot the current key state, then briefly settle. A key pressed
     # during the settle MUST still count (pressing right after the prompt
@@ -85,7 +85,7 @@ function Capture-KeyOrMouse([string]$default, [string]$label) {
             $down = Test-KeyDown $vk
             if ($down -and -not $prev[$vk]) {
                 if ($vk -eq 0x0D -or $vk -eq 0x1B) {
-                    Write-Host "  kept $default"
+                    Write-Host "  kept $(Format-KeyDisplay $default)"
                     return $default
                 }
                 if ($MouseVK.ContainsKey($vk)) {
@@ -106,7 +106,7 @@ function Capture-KeyOrMouse([string]$default, [string]$label) {
             $down = Test-KeyDown $vk
             if ($down -and -not $prev[$vk]) {
                 if ($vk -eq 0x0D -or $vk -eq 0x1B) {
-                    Write-Host "  kept $default"
+                    Write-Host "  kept $(Format-KeyDisplay $default)"
                     return $default
                 }
                 if ($MouseVK.ContainsKey($vk)) {
@@ -131,6 +131,14 @@ function Clear-ConsoleInput {
     try {
         while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
     } catch { }
+}
+# Human-readable form of a stored key value: "Z (0x5A)"; names stay as-is.
+function Format-KeyDisplay([string]$value) {
+    if ($value -match '^0[xX]([0-9A-Fa-f]{1,2})$') {
+        $vk = [Convert]::ToInt32($matches[1], 16)
+        return ('{0} (0x{1:X2})' -f (Get-VKName $vk), $vk)
+    }
+    return $value
 }
 # Key values are stored as VK hex for exactness, with the plain-English name
 # as an inline ";" comment so the ini stays readable:
