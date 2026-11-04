@@ -125,11 +125,9 @@ if cfgPath ~= nil then
 end
 if iniContent ~= nil then ApplyConfig(iniContent) end
 
--- signal file (written by DodgeSignal.ps1, read below)
-local signalPath = nil
-if cfgPath ~= nil then
-    signalPath = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "dodge_signals.txt")
-end
+-- signal channel (written by DodgeSignal.ps1, read below) - named pipe,
+-- kernel memory: nothing touches the disk
+local signalPath = "\\\\.\\pipe\\DodgeModSignal"
 
 -- ================= dodge logic =================
 -- cached player controller: UEHelpers.GetPlayerController() runs an uncached

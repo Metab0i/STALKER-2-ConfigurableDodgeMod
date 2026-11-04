@@ -1,4 +1,4 @@
-# Configurable Dodge Mod - input listener (v6)
+# Configurable Dodge Mod - input listener (v7)
 # Owns ALL key-binding logic: watches the keys configured in
 # ConfigurableDodgeMod.ini at the OS level (GetAsyncKeyState - sees every
 # key, including modifiers that UE4SS cannot), performs the double-tap
@@ -6,9 +6,13 @@
 # (kernel memory - nothing touches the disk).
 #
 # Lifetime is tied to the game by a process handle: the listener opens the
-# game process with SYNCHRONIZE rights and blocks on it - when the game
-# terminates, the wait signals and the listener exits. No polling of
-# process liveness anywhere.
+# game process with SYNCHRONIZE rights and waits on it - when the game
+# terminates, the wait signals and the listener exits.
+#
+# Pipe lifecycle (fixes the busy/deadlock issue): ONE persistent server
+# instance; waits for the Lua client (250 ms timeout so the game-exit check
+# always runs), writes the state line every 50 ms while connected, then
+# disconnects and waits for the next client.
 #
 # Started automatically by the mod at game boot. Exits when the game closes.
 
@@ -142,8 +146,6 @@ function Update-Keys {
 }
 
 # ================= lifetime: tied to the game process =================
-# wait for the game to exist (pre-game only), then open a SYNCHRONIZE
-# handle: WaitForSingleObject on it signals the instant the game dies
 while ($hGame -eq [IntPtr]::Zero) {
     $gamePid = Find-GamePid
     if ($gamePid -ne 0) {
@@ -156,10 +158,14 @@ while ($hGame -eq [IntPtr]::Zero) {
 Write-Host "Dodge input listener running (modality: $($cur['Modality']), game pid $gamePid)."
 Write-Host "Exits automatically when the game terminates."
 
-# ================= main loop =================
-while ($true) {
+# ================= pipe server (single persistent instance) =================
+$server = $null
+$writer = $null
+$gameDead = $false
+
+while (-not $gameDead) {
     # game terminated? (kernel wait, zero cost - signals immediately on exit)
-    if ([SigListen]::WaitForSingleObject($hGame, 0) -eq 0) { break }
+    if ([SigListen]::WaitForSingleObject($hGame, 0) -eq 0) { $gameDead = $true; break }
 
     # live config: re-read the ini every ~2 s
     if ($iniReadAt.ElapsedMilliseconds -gt 2000) {
@@ -167,32 +173,40 @@ while ($true) {
         Read-Ini
     }
 
-    # one service cycle: key polling + pipe write
-    $server = New-Object System.IO.Pipes.NamedPipeServerStream("DodgeModSignal", [System.IO.Pipes.PipeDirection]::Out)
-    try {
-        # async wait with timeout so this cycle stays bounded
-        $waitTask = $server.WaitForConnectionAsync()
-        if (-not $waitTask.Wait(120)) { continue }
+    if ($server -eq $null) {
+        try {
+            $server = New-Object System.IO.Pipes.NamedPipeServerStream("DodgeModSignal", [System.IO.Pipes.PipeDirection]::Out)
+        } catch {
+            # previous instance still winding down - brief backoff
+            Start-Sleep -Milliseconds 100
+            continue
+        }
+    }
 
+    # wait for the Lua client (bounded, so the game-exit check keeps running)
+    $waitTask = $server.WaitForConnectionAsync()
+    if (-not $waitTask.Wait(250)) { continue }
+
+    try {
         $writer = New-Object System.IO.StreamWriter($server)
         $writer.AutoFlush = $true
-        while ($true) {
-            if ([SigListen]::WaitForSingleObject($hGame, 0) -eq 0) { break }   # game died
+        # connected: stream state every 50 ms while the client stays
+        while ($server.IsConnected -and -not $gameDead) {
+            if ([SigListen]::WaitForSingleObject($hGame, 0) -eq 0) { $gameDead = $true; break }
             if ($iniReadAt.ElapsedMilliseconds -gt 2000) { $iniReadAt.Restart(); Read-Ini }
             Update-Keys
             $state = "btn=$($counters['btn']) dtl=$($counters['dtl']) dtr=$($counters['dtr']) dtb=$($counters['dtb'])"
             $writer.WriteLine($state)
-            if (-not $server.IsConnected) { break }
             Start-Sleep -Milliseconds 50
         }
     } catch {}
     finally {
-        if ($writer) { $writer.Dispose() }
-        $server.Dispose()
+        if ($writer) { $writer.Dispose(); $writer = $null }
     }
 
-    if ([SigListen]::WaitForSingleObject($hGame, 0) -eq 0) { break }   # game died mid-cycle
-    Start-Sleep -Milliseconds 20
+    if ($server.IsConnected) { $server.Disconnect() }
 }
 
+if ($writer) { $writer.Dispose() }
+if ($server) { $server.Dispose() }
 [SigListen]::CloseHandle($hGame) | Out-Null
