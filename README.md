@@ -2,71 +2,82 @@
 
 ![Configurable Dodge Mod thumbnail](media/main.png)
 
-Double-tap **Z** (left), **C** (right) or **S** (back) and Skif hops out of the
-way. Values (dodge strengths, stamina cost, keys) are configurable in the
-Mod Configuration Menu.
-
-
-
+Hold a movement key and press your dodge button (default **Left Alt**), or
+double-tap your dodge keys, and Skif dodges left / right / back relative to the
+camera. Each dodge costs stamina. Every key and force value is configurable.
 
 ## Demo
 
 [![Dodging demo video](https://img.youtube.com/vi/KpYUs2ZFAlU/0.jpg)](https://www.youtube.com/watch?v=KpYUs2ZFAlU)
 
-## Requirements
+## How button capture works
 
-| Dependency | Version / ID |
-| --- | --- |
-| S.T.A.L.K.E.R. 2: Heart of Chornobyl | update 2.0+ (Steam) |
-| UE4SS | experimental build `v3.0.1-1028-gd7e7826d` (GitHub `UE4SS-RE/RE-UE4SS`, `experimental` tag) |
-| RE-UE4SS Compatibility Fix for Update 2.0 (UE5.5) | Nexus Mods ID 2341, v1.2 (ship game-specific `GUObjectArray`/`FName::ToString` signatures + patched `UE4SS.dll`; the `_full` package already includes it) |
-| Mod Configuration Menu | Nexus Mods ID 2225, v2.0 (optional — mod works without it at default values) |
+UE4SS keybindings never see Windows system keys (Alt/Ctrl/Shift) and are
+unreliable after loading a world, so the mod uses its own input path:
+
+1. At game start the mod launches `DodgeSignal.ps1`, a small PowerShell
+   listener (mutex-guarded, exits with the game).
+2. The listener reads the configured keys at the OS level
+   (`GetAsyncKeyState`) and times the double-taps.
+3. It streams press counters to the mod through a named pipe - kernel memory,
+   nothing is written to disk.
+4. The Lua side reads the pipe and performs the dodge. If the listener stops,
+   the mod restarts it automatically.
+
+Because capture happens at the OS level, keyboard keys, modifiers
+(Left Alt / Ctrl / Shift) and mouse buttons all behave identically.
 
 ## Install
 
-1. Copy the `ConfigurableDodgeMod` folder to `Stalker2\Binaries\Win64\ue4ss\Mods\`
-2. Add `ConfigurableDodgeMod : 1` to `ue4ss\Mods\mods.txt` (no spaces in the mod id)
-3. Launch. Default: hold a movement key and press **Left Alt** to dodge.
+1. Copy the `ConfigurableDodgeMod` folder into
+   `Stalker2\Binaries\Win64\ue4ss\Mods\`
+2. Add `ConfigurableDodgeMod : 1` to `ue4ss\Mods\mods.txt`
+3. Launch the game. Default: hold **A/D/S** + press **Left Alt**.
 
-No MCM needed — the mod is configured entirely through a plain ini file.
+The `_full` package includes the UE4SS runtime and the update 2.x
+compatibility fix.
+
+## Use
+
+- Hold a movement key and press the dodge button. A/D/S dodge left / right /
+  back; forward-only movement does nothing.
+- In double-tap mode, double-tap the configured keys (Z / C / S by default).
+- 20 stamina per dodge (vanilla jump). Low stamina and open menus/dialogs block
+  dodges.
 
 ## Configure
 
-Run **`Setup.bat`** (in the mod folder) for an interactive setup — it asks for
-your dodge modality (button or double-tap, one at a time), captures keys, and
-writes the config. Or edit **`ConfigurableDodgeMod.ini`** directly:
+Run **`Setup.bat`** in the mod folder:
 
-- `Modality` = `button` (hold movement key + press the dodge button) or
-  `doubletap` (double-tap the dodge keys) — only one is active
-- `ButtonKey` — the dodge button (default `Left Alt`; any keyboard key,
-  modifier (Alt/Ctrl/Shift) or mouse button works)
-- `DoubleTapLeft/Right/Back` — the double-tap keys (default `Z` / `C` / `S`)
-- Dodge forces and stamina cost
+- choose button or double-tap mode
+- press a key to bind it - any key works, including Left Alt/Ctrl/Shift and
+  mouse buttons; it is stored as name plus hex (e.g. `0x58   ; X`)
+- set forces and stamina cost, or press **3** to reset everything to defaults
 
-**Key name reference:** https://ue4ss.org/data-complex/coding-standard#a-name-usage
+Or edit **`ConfigurableDodgeMod.ini`** directly:
 
-Changes to the ini apply **live within ~2 seconds** — no restart.
+| Key | Meaning | Default |
+| --- | --- | --- |
+| `Modality` | `button` or `doubletap` | `button` |
+| `ButtonKey` | dodge button (name, VK hex or mouse button) | `Left Alt` |
+| `DoubleTapLeft/Right/Back` | double-tap keys | `Z` / `C` / `S` |
+| `DoubleTapWindow` | max seconds between taps | `0.25` |
+| `SideHorizontal/SideVertical` | side dodge force (cm/s) | `650` / `500` |
+| `BackHorizontal/BackVertical` | back dodge force (cm/s) | `900` / `200` |
+| `StaminaCost` | stamina per dodge | `20` |
 
-## Notes
+Changes apply live within ~2 seconds - no restart.
 
-- Each dodge costs 20 SP (vanilla jump); dodging is blocked at low stamina
-- Dodging is disabled while the game is in a menu/dialog (stash, conversations)
-- Modifier keys (Alt/Ctrl/Shift) are supported: UE4SS's input hook cannot see
-  them (Windows delivers them as system-key messages), so the mod starts a
-  small PowerShell listener automatically at boot. It watches the configured
-  keys at the OS level and streams presses to the mod through a named pipe
-  (kernel memory - no files are written). It is mutex-guarded, starts once,
-  and exits automatically when the game closes. If the message "Dodge keys are
-  inactive" appears, restart the game once; you can also start it manually by
-  running `DodgeSignal.ps1` in the mod folder.
-- Keyboard and mouse buttons both work; the listener handles every key
-  uniformly, so delivery is independent of UE4SS's input hook
+## Requirements
+
+| Dependency | Version |
+| --- | --- |
+| S.T.A.L.K.E.R. 2: Heart of Chornobyl | update 2.0+ |
+| UE4SS | experimental `v3.0.1-1028-gd7e7826d` |
+| RE-UE4SS Compatibility Fix (Nexus 2341) | v1.2 - included in the `_full` package |
 
 ## Credits
 
-- Dodge concept: **rbwadle** (Nexus 1243) — the original pak mod predates
-  update 2.0's engine and cannot load on it; this is a script-side rebuild
+- Dodge concept: **rbwadle** (Nexus 1243) - the original pak mod cannot load on
+  update 2.0
 - **UE4SS** (RE-UE4SS, MIT) and the community compatibility fix (Nexus 2341)
-
-
-

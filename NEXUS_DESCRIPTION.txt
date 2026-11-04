@@ -1,49 +1,46 @@
 [size=4][b]Description[/b][/size][size=3][color=#D4D4D8]
-Configurable Dodge Mod adds a proper dodge to S.T.A.L.K.E.R. 2. Hold a movement key and press your dodge button (Left Alt by default) - or double-tap your dodge keys - and Skif hops out of the way, left, right or backwards, relative to wherever you are looking. Every force value and every keybind is configurable live in a plain ini file (interactive Setup.bat included; no MCM needed), and each dodge costs stamina through the game's own vitals system (same cost as a vanilla jump), so it plays by the Zone's rules instead of being a free escape button.
-
-This is a from-scratch rebuild of the classic Dodge mod concept for game update 2.0+, implemented as an UE4SS script mod.[/color][/size]
+Configurable Dodge Mod adds a stamina-based dodge to S.T.A.L.K.E.R. 2. Hold a movement key and press the dodge button (Left Alt by default) - or double-tap your dodge keys - and Skif dodges left, right or back, camera-relative. Every key and force value is configurable live; no MCM needed.[/color][/size]
 
 [youtube]KpYUs2ZFAlU[/youtube]
 
-[size=4][b]Installation instructions[/b][/size][size=3][color=#D4D4D8]
-[i]Option A - "full" package (recommended if you do not have UE4SS yet):[/i]
-[b]1.[/b] Copy the contents of the zip into your game's[/color][/size]
-[code]S.T.A.L.K.E.R. 2 Heart of Chornobyl\Stalker2\Binaries\Win64\[/code]
-[size=3][color=#D4D4D8]folder (the one containing Stalker2-Win64-Shipping.exe). This installs a UE4SS runtime pre-configured for STALKER 2 plus the mod.
-[b]2.[/b] Launch the game. Done.
+[size=4][b]Installation[/b][/size][size=3][color=#D4D4D8]
+[i]Full package (no UE4SS yet):[/i] copy the zip contents into
+[/color][/size][code]Stalker2\Binaries\Win64\[/code][size=3][color=#D4D4D8]
+then launch the game.
 
-[i]Option B - "mod-only" package (you already have UE4SS):[/i]
-[b]1.[/b] Copy the [b]ConfigurableDodgeMod[/b] folder into[/color][/size]
-[code]S.T.A.L.K.E.R. 2 Heart of Chornobyl\Stalker2\Binaries\Win64\ue4ss\Mods\[/code]
-[size=3][color=#D4D4D8][b]2.[/b] In [b]ue4ss\Mods\mods.txt[/b], make sure there is a line:[/color][/size]
-[code]ConfigurableDodgeMod : 1[/code]
-[size=3][color=#D4D4D8][b]3.[/b] Launch the game.
+[i]Mod-only package (UE4SS installed):[/i]
+[b]1.[/b] Copy [b]ConfigurableDodgeMod[/b] into
+[/color][/size][code]...\ue4ss\Mods\[/code][size=3][color=#D4D4D8]
+[b]2.[/b] Add to [b]ue4ss\Mods\mods.txt[/b]:
+[/color][/size][code]ConfigurableDodgeMod : 1[/code][size=3][color=#D4D4D8]
+[b]3.[/b] Launch the game.[/color][/size]
 
-[i]Basic use:[/i] hold [b]A[/b] / [b]D[/b] / [b]S[/b] and press [b]Left Alt[/b] to dodge left / right / backwards (default button mode). Prefer double-taps? Run [b]Setup.bat[/b] in the mod folder and pick double-tap mode ([b]Z[/b] / [b]C[/b] / [b]S[/b] by default).[/color][/size]
+[size=4][b]Configuration[/b][/size][size=3][color=#D4D4D8]
+Run [b]Setup.bat[/b] in the mod folder, or edit [b]ConfigurableDodgeMod.ini[/b]. Changes apply live within ~2 seconds.[/color][/size]
 
-[size=4][b]Main features[/b][/size]
 [list]
-[*][size=3][color=#D4D4D8]Double-tap dodges in three directions (left / right / back), camera-relative[/color][/size][/*]
-[*][size=3][color=#D4D4D8]Separate directional and vertical force values for side dodges and back dodges[/color][/size][/*]
-[*][size=3][color=#D4D4D8]Stamina cost per dodge (vanilla jump cost by default) - applied through the game's native vitals API so the HUD updates properly[/color][/size][/*]
-[*][size=3][color=#D4D4D8]Dodging is blocked when you lack the stamina for it (toggleable)[/color][/size][/*]
-[*][size=3][color=#D4D4D8]Two input modes: a dodge button (hold a movement key + press it) or double-tap keys - pick one in Setup.bat[/color][/size][/*]
-[*][size=3][color=#D4D4D8]Any key works as the dodge button, including modifier keys (Left Alt, Ctrl, Shift) and mouse buttons - a small listener starts automatically with the game[/color][/size][/*]
-[*][size=3][color=#D4D4D8]All values configured via a plain ini file (interactive Setup.bat included): dodge forces, stamina cost, keys, double-tap window[/color][/size][/*]
-[*][size=3][color=#D4D4D8]ini changes apply live in ~2 seconds - no restart needed; mid-combat[/color][/size][/*]
-[*][size=3][color=#D4D4D8]No MCM needed at all - plain ini config, zero dependencies beyond UE4SS[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]Modality[/b] - [code]button[/code] (hold a movement key + press the dodge button) or [code]doubletap[/code] (double-tap keys). One is active.[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]ButtonKey[/b] - the dodge button. Any key works: letters, F-keys, arrows, modifiers (Left Alt / Ctrl / Shift) and mouse buttons. Default [b]Left Alt[/b].[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]DoubleTapLeft / Right / Back[/b] - double-tap keys. Default [b]Z / C / S[/b].[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]DoubleTapWindow[/b] - max seconds between taps. Default [b]0.25[/b].[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]SideHorizontal / SideVertical[/b] - side dodge force (cm/s). Default [b]650 / 500[/b].[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]BackHorizontal / BackVertical[/b] - back dodge force (cm/s). Default [b]900 / 200[/b].[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]StaminaCost[/b] - stamina per dodge. Default [b]20[/b] (vanilla jump).[/color][/size][/*]
 [/list]
+
+[size=3][color=#D4D4D8]
+[b]Setup.bat[/b] captures keys live - press the key to bind it. Option [b]3[/b] at the modality prompt resets all settings to defaults.
+
+Default controls: hold [b]A / D / S[/b] and press [b]Left Alt[/b]. Forward-only movement does not dodge; low stamina and open menus/dialogs block dodges.[/color][/size]
 
 [size=4][b]Requirements[/b][/size]
 [list]
-[*][size=3][color=#D4D4D8]S.T.A.L.K.E.R. 2: Heart of Chornobyl, update [b]2.0 or newer[/b] (Steam)[/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]UE4SS[/b] - experimental build [b]v3.0.1-1028-gd7e7826d[/b] from the RE-UE4SS GitHub "experimental" release tag[/color][/size][/*]
-[*][size=3][color=#D4D4D8][url=https://www.nexusmods.com/stalker2heartofchornobyl/mods/2341]RE-UE4SS Compatibility Fix for Update 2.0 (UE5.5) v1.2[/url] - stock UE4SS cannot load on this game's UE 5.5.4 executable without it. Settings required by the fix are listed in its own description (bUseUObjectArrayCache = false, DefaultFNameToStringMethod = Scan, and its [Hooks] list). The "full" package of this mod already ships a correctly configured UE4SS with this fix.[/color][/size][/*]
+[*][size=3][color=#D4D4D8]S.T.A.L.K.E.R. 2: Heart of Chornobyl, update [b]2.0 or newer[/b][/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]UE4SS[/b] - experimental build [b]v3.0.1-1028-gd7e7826d[/b][/color][/size][/*]
+[*][size=3][color=#D4D4D8][url=https://www.nexusmods.com/stalker2heartofchornobyl/mods/2341]RE-UE4SS Compatibility Fix for Update 2.0 (UE5.5) v1.2[/url] - included in the full package[/color][/size][/*]
 [/list]
 
 [size=4][b]Shout outs[/b][/size][size=3][color=#D4D4D8]
-rbwadle for inspiring the idea - the original [url=https://www.nexusmods.com/stalker2heartofchornobyl/mods/1243]Dodge mod[/url] was built for an older engine version and cannot load on update 2.0, which is what motivated this script-side rebuild.
-
-[b]RE-UE4SS[/b] team (MIT-licensed UE4SS), and the community compatibility effort for STALKER 2's UE 5.5.4 build: robert-krukau (compat build and testing) and chrisdabeer (FName::ToString signature and ProcessLocalScriptFunction investigation)
-
-GSC Game World for one of the most moddable UE5 games in years[/color][/size]
+rbwadle for the original [url=https://www.nexusmods.com/stalker2heartofchornobyl/mods/1243]Dodge mod[/url] idea.
+RE-UE4SS team, and the community compatibility effort for STALKER 2's UE 5.5.4 build.
+GSC Game World for one of the most moddable UE5 games in years.[/color][/size]
