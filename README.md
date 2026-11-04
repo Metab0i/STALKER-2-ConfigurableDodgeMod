@@ -54,6 +54,10 @@ Run **`Setup.bat`** in the mod folder:
   mouse buttons; it is stored as name plus hex (e.g. `0x58   ; X`)
 - set forces and stamina cost, or press **3** to reset everything to defaults
 
+| Modality | Key capture | Forces |
+| --- | --- | --- |
+| ![Setup - modality](media/setup-1-modality.png) | ![Setup - key capture](media/setup-2-key-capture.png) | ![Setup - forces](media/setup-3-forces.png) |
+
 Or edit **`ConfigurableDodgeMod.ini`** directly:
 
 | Key | Meaning | Default |
