@@ -12,13 +12,13 @@ public static class ModListen {
     [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
     [DllImport("user32.dll")] public static extern uint SendInput(uint n, INPUT[] p, int size);
     [DllImport("kernel32.dll")] public static extern bool CreateMutex(IntPtr attr, bool initial, string name);
-    [StructLayout(LayoutKind.Sequential)] public struct KEYBDINPUT { public ushort vk; public ushort scan; public uint flags; public uint time; public IntPtr extra; }
-    [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public KEYBDINPUT ki; public ulong pad; }
-    public static void Tap(ushort vk) {
-        INPUT[] d = new INPUT[1]; d[0].type = 1; d[0].ki.vk = vk;
+    [StructLayout(LayoutKind.Sequential)] public struct MOUSEINPUT { public int dx; public int dy; public uint mouseData; public uint dwFlags; public uint time; public IntPtr extra; }
+    [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public MOUSEINPUT mi; public ulong pad; }
+    public static void TapMouse4() {
+        INPUT[] d = new INPUT[1]; d[0].type = 0; d[0].mi.dwFlags = 0x0080; d[0].mi.mouseData = 1; // XDOWN, XBUTTON1
         SendInput(1, d, Marshal.SizeOf(typeof(INPUT)));
         System.Threading.Thread.Sleep(30);
-        INPUT[] u = new INPUT[1]; u[0].type = 1; u[0].ki = new KEYBDINPUT { vk = vk, flags = 2 };
+        INPUT[] u = new INPUT[1]; u[0].type = 0; u[0].mi.dwFlags = 0x0100; u[0].mi.mouseData = 1; // XUP
         SendInput(1, u, Marshal.SizeOf(typeof(INPUT)));
     }
 }
@@ -28,20 +28,10 @@ $created = $false
 try { $mutex = [System.Threading.Mutex]::new($true, "DodgeModModifierListener", [ref]$created) } catch { $created = $true }
 if (-not $created) { exit }
 
-# modifier VK -> synthetic F-key VK (private channel, no keyboard has F13+)
-$map = @{
-    0xA0 = 0x80  # Left Shift  -> F17
-    0xA1 = 0x81  # Right Shift -> F18
-    0xA2 = 0x7E  # Left Ctrl   -> F15
-    0xA3 = 0x7F  # Right Ctrl  -> F16
-    0xA4 = 0x7C  # Left Alt    -> F13
-    0xA5 = 0x7D  # Right Alt   -> F14
-    0x10 = 0x7C  # generic Shift
-    0x11 = 0x7E  # generic Ctrl
-    0x12 = 0x7C  # generic Alt
-}
+# every modifier press (L/R Alt, Ctrl, Shift) becomes a Mouse 4 tap -
+# the single dodge-input channel verified to deliver in gameplay
 $wasDown = @{}
-$modVKs = @($map.Keys)
+$modVKs = @(0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x10, 0x11, 0x12)
 
 Write-Host "Modifier key listener running (Alt/Ctrl/Shift -> dodge inputs)."
 Write-Host "Auto-exits when the game closes."
@@ -50,7 +40,7 @@ while ($true) {
     foreach ($mvk in $modVKs) {
         $down = (([ModListen]::GetAsyncKeyState($mvk) -band 0x8000) -ne 0)
         if ($down -and -not $wasDown[$mvk]) {
-            [ModListen]::Tap([byte]$map[$mvk])
+            [ModListen]::TapMouse4()
         }
         $wasDown[$mvk] = $down
     }

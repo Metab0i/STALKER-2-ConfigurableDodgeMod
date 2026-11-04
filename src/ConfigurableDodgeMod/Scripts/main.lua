@@ -518,34 +518,23 @@ local LISTENER_B64 =
 
 -- ================= boot =================
 -- modifier keys (Left Alt etc.) cannot be bound via UE4SS hooks; when one is
--- configured, the mod binds the key's private F13-F24 channel instead and
--- auto-starts the companion listener, which taps that F-key on each press
+-- configured, the mod auto-starts the companion listener (which translates
+-- each modifier press into a synthetic Mouse 4 press - mouse delivery is
+-- verified working in gameplay) and binds Mouse 4 as the dodge button
 local modifierButton = false
 do
     local n = string.upper(string.gsub(KEY_DODGE_BTN, "[^%w]", ""))
-    if n == "LEFTALT" or n == "LALT" or n == "ALT" then KEY_DODGE_BTN = "F13"; modifierButton = true
-    elseif n == "RIGHTALT" or n == "RALT" then KEY_DODGE_BTN = "F14"; modifierButton = true
-    elseif n == "LEFTCONTROL" or n == "LCTRL" or n == "CTRL" then KEY_DODGE_BTN = "F15"; modifierButton = true
-    elseif n == "RIGHTCONTROL" or n == "RCTRL" then KEY_DODGE_BTN = "F16"; modifierButton = true
-    elseif n == "LEFTSHIFT" or n == "LSHIFT" or n == "SHIFT" then KEY_DODGE_BTN = "F17"; modifierButton = true
-    elseif n == "RIGHTSHIFT" or n == "RSHIFT" then KEY_DODGE_BTN = "F18"; modifierButton = true end
+    if n == "LEFTALT" or n == "LALT" or n == "ALT" or n == "RIGHTALT" or n == "RALT" or n == "LEFTCONTROL" or n == "LCTRL" or n == "CTRL" or n == "RIGHTCONTROL" or n == "RCTRL" or n == "LEFTSHIFT" or n == "LSHIFT" or n == "SHIFT" or n == "RIGHTSHIFT" or n == "RSHIFT" then modifierButton = true end
 end
 if MODALITY == "button" and modifierButton then
+    KEY_DODGE_BTN = "ThumbMouseButton"  -- the listener taps Mouse 4; bind that
     if cfgPath ~= nil and os ~= nil and type(os.execute) == "function" then
         local listenerPath = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "ModifierListener.ps1")
         pcall(function()
             os.execute('start "DodgeModListener" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. listenerPath .. '"')
         end)
-        print("[Configurable Dodge Mod] Dodge button: " .. KEY_DODGE_BTN .. ". A small background helper was started so this key works - if dodging does not respond, restart the game once. If it still does not work, your system is blocking the helper: open ConfigurableDodgeMod.ini and set ButtonKey=X (or any letter / mouse button).")
-        DevLog("modifier listener auto-started, bind=" .. KEY_DODGE_BTN)
-    end
-    -- boot-context bind of the private F-key (dofile-context binds never fire)
-    local k = keyNameToValue[KEY_DODGE_BTN]
-    if k ~= nil then
-        pcall(function()
-            RegisterKeyBind(k, function() DodgeMod_Dispatch("button", KEY_DODGE_BTN) end)
-        end)
-        DevLog("bound modifier channel: " .. KEY_DODGE_BTN)
+        print("[Configurable Dodge Mod] dodge button: " .. KEY_DODGE_BTN .. " via modifier key (listener started automatically)")
+        DevLog("modifier listener auto-started, dodge button bound to Mouse 4")
     end
 end
 -- ================= hot reload (dev only, .hotreload gated) =================
