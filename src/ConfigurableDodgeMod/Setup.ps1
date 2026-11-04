@@ -188,39 +188,56 @@ if (Test-Path $ini) {
 if ($cur["Modality"] -ne "doubletap") { $cur["Modality"] = "button" }
 
 # --- modality ---
+$resetRequested = $false
 while ($true) {
     Write-Host "Choose your dodge modality (only one can be active):" -ForegroundColor Cyan
     Write-Host "  1) Dodge button - hold a movement key, press a dodge button  [current: $($cur['Modality'])]"
     Write-Host "  2) Double-tap   - double-tap dodge keys (Z / C / S)          [current: $($cur['Modality'])]"
+    Write-Host "  3) Reset to defaults - button mode, Left Alt dodge button (current forces kept)"
     Clear-ConsoleInput
-    $mode = Read-Host "1 or 2 [Enter = keep $($cur['Modality'])]"
+    $mode = Read-Host "1, 2 or 3 [Enter = keep $($cur['Modality'])]"
     if ([string]::IsNullOrWhiteSpace($mode)) { break }
     if ($mode.Trim() -eq "1") { $cur["Modality"] = "button"; break }
     if ($mode.Trim() -eq "2") { $cur["Modality"] = "doubletap"; break }
-    Write-Host "  please type 1 or 2 (or press Enter to keep the current mode)." -ForegroundColor Red
+    if ($mode.Trim() -eq "3") {
+        $cur["Modality"] = "button"
+        $cur["ButtonKey"] = "Left Alt"
+        $cur["DoubleTapLeft"] = "Z"
+        $cur["DoubleTapRight"] = "C"
+        $cur["DoubleTapBack"] = "S"
+        $cur["DoubleTapWindow"] = "0.25"
+        $resetRequested = $true
+        break
+    }
+    Write-Host "  please type 1, 2 or 3 (or press Enter to keep the current mode)." -ForegroundColor Red
 }
 
-# --- keys (captured, not typed) ---
-if ($cur["Modality"] -eq "button") {
-    $cur["ButtonKey"] = Capture-KeyOrMouse $cur["ButtonKey"] "DODGE BUTTON - hold a movement key + press this to dodge:"
-    Clear-ConsoleInput
+if (-not $resetRequested) {
+    # --- keys (captured, not typed) ---
+    if ($cur["Modality"] -eq "button") {
+        $cur["ButtonKey"] = Capture-KeyOrMouse $cur["ButtonKey"] "DODGE BUTTON - hold a movement key + press this to dodge:"
+        Clear-ConsoleInput
+    } else {
+        $cur["DoubleTapLeft"]  = Capture-KeyOrMouse $cur["DoubleTapLeft"]  "DOUBLE-TAP LEFT key:"
+        Clear-ConsoleInput
+        $cur["DoubleTapRight"] = Capture-KeyOrMouse $cur["DoubleTapRight"] "DOUBLE-TAP RIGHT key:"
+        Clear-ConsoleInput
+        $cur["DoubleTapBack"]  = Capture-KeyOrMouse $cur["DoubleTapBack"]  "DOUBLE-TAP BACK key:"
+        Clear-ConsoleInput
+    }
+
+    # --- forces + stamina (validated) ---
+    Write-Host ""
+    Write-Host "Directional/vertical forces (cm/s) and stamina - type a number, or Enter to keep:" -ForegroundColor Cyan
+    $cur["SideHorizontal"] = Format-Number (Read-ValidNumber "Side dodge directional force" $cur["SideHorizontal"] 1 10000)
+    $cur["SideVertical"]   = Format-Number (Read-ValidNumber "Side dodge vertical force"   $cur["SideVertical"]   0 10000)
+    $cur["BackHorizontal"] = Format-Number (Read-ValidNumber "Back dodge directional force" $cur["BackHorizontal"] 1 10000)
+    $cur["BackVertical"]   = Format-Number (Read-ValidNumber "Back dodge vertical force"   $cur["BackVertical"]   0 10000)
+    $cur["StaminaCost"]    = Format-Number (Read-ValidNumber "Stamina cost"                $cur["StaminaCost"]    0 1000)
 } else {
-    $cur["DoubleTapLeft"]  = Capture-KeyOrMouse $cur["DoubleTapLeft"]  "DOUBLE-TAP LEFT key:"
-    Clear-ConsoleInput
-    $cur["DoubleTapRight"] = Capture-KeyOrMouse $cur["DoubleTapRight"] "DOUBLE-TAP RIGHT key:"
-    Clear-ConsoleInput
-    $cur["DoubleTapBack"]  = Capture-KeyOrMouse $cur["DoubleTapBack"]  "DOUBLE-TAP BACK key:"
-    Clear-ConsoleInput
+    Write-Host ""
+    Write-Host "Reset to defaults: button mode, Left Alt dodge button. Current forces kept." -ForegroundColor Green
 }
-
-# --- forces + stamina (validated) ---
-Write-Host ""
-Write-Host "Forces (cm/s) and stamina - type a number, or Enter to keep:" -ForegroundColor Cyan
-$cur["SideHorizontal"] = Format-Number (Read-ValidNumber "Side dodge horizontal" $cur["SideHorizontal"] 1 10000)
-$cur["SideVertical"]   = Format-Number (Read-ValidNumber "Side dodge vertical"   $cur["SideVertical"]   0 10000)
-$cur["BackHorizontal"] = Format-Number (Read-ValidNumber "Back dodge horizontal" $cur["BackHorizontal"] 1 10000)
-$cur["BackVertical"]   = Format-Number (Read-ValidNumber "Back dodge vertical"   $cur["BackVertical"]   0 10000)
-$cur["StaminaCost"]    = Format-Number (Read-ValidNumber "Stamina cost"          $cur["StaminaCost"]    0 1000)
 
 $window = ConvertTo-Number $cur["DoubleTapWindow"]
 if ($window -eq $null -or $window -le 0 -or $window -gt 5) { $cur["DoubleTapWindow"] = "0.25" }
@@ -245,7 +262,7 @@ $content = @(
     "DoubleTapBack=$($cur['DoubleTapBack'])",
     "DoubleTapWindow=$($cur['DoubleTapWindow'])",
     "",
-    "; --- Forces (cm/s) and stamina cost (vanilla jump = 20) ---",
+    "; --- Directional and vertical forces (cm/s) and stamina cost (vanilla jump = 20) ---",
     "SideHorizontal=$($cur['SideHorizontal'])",
     "SideVertical=$($cur['SideVertical'])",
     "BackHorizontal=$($cur['BackHorizontal'])",

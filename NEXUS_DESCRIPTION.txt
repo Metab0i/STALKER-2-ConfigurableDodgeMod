@@ -24,7 +24,7 @@ This is a from-scratch rebuild of the classic Dodge mod concept for game update 
 [size=4][b]Main features[/b][/size]
 [list]
 [*][size=3][color=#D4D4D8]Double-tap dodges in three directions (left / right / back), camera-relative[/color][/size][/*]
-[*][size=3][color=#D4D4D8]Separate horizontal and vertical force values for side dodges and back dodges[/color][/size][/*]
+[*][size=3][color=#D4D4D8]Separate directional and vertical force values for side dodges and back dodges[/color][/size][/*]
 [*][size=3][color=#D4D4D8]Stamina cost per dodge (vanilla jump cost by default) - applied through the game's native vitals API so the HUD updates properly[/color][/size][/*]
 [*][size=3][color=#D4D4D8]Dodging is blocked when you lack the stamina for it (toggleable)[/color][/size][/*]
 [*][size=3][color=#D4D4D8]Two input modes: a dodge button (hold a movement key + press it) or double-tap keys - pick one in Setup.bat[/color][/size][/*]
