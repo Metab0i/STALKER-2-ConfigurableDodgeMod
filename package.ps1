@@ -31,8 +31,14 @@ function New-Package($name, $installerText, $includeRuntime) {
     # installation readme
     Set-Content -LiteralPath (Join-Path $stage "INSTALL.txt") -Value $installerText -Encoding UTF8
 
-    # project readme (distributed as-is)
+    # project readme (distributed as-is) + the images it references
     Copy-Item (Join-Path $ProjectRoot "README.md") $stage
+    $mediaSrc = Join-Path $ProjectRoot "media"
+    if (Test-Path $mediaSrc) {
+        $mediaDst = Join-Path $stage "media"
+        New-Item -ItemType Directory -Path $mediaDst -Force | Out-Null
+        Get-ChildItem $mediaSrc -File -Filter *.png | Copy-Item -Destination $mediaDst -Force
+    }
 
     # optional UE4SS runtime (proxy dll + ue4ss folder; our mod is already inside the staged copy)
     if ($includeRuntime) {
