@@ -423,30 +423,49 @@ print(string.format("[Configurable Dodge Mod] v2.2 loaded - mode: %s (%s), stami
     STAMINA_COST))
 DevLog(string.format("boot v2.2 gen=%d mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
 
+-- ================= ini live reload (always on) =================
+-- the listener re-reads the ini every ~2 s for key detection; this keeps the
+-- in-game values (forces, stamina, modality, window) in sync the same way, so
+-- editing ConfigurableDodgeMod.ini applies live - no restart needed
+if cfgPath ~= nil then
+    LoopAsync(2000, function()
+        if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
+        local newIni
+        pcall(function()
+            local h = io.open(cfgPath, "rb")
+            if h ~= nil then newIni = h:read("*a"); h:close() end
+        end)
+        if newIni ~= nil and newIni ~= iniContent then
+            iniContent = newIni
+            ApplyConfig(newIni)
+            DevLog("ini reloaded: mode=" .. MODALITY .. " btn=" .. KEY_DODGE_BTN)
+            print(string.format("[Configurable Dodge Mod] ini reloaded - mode %s, dodge button %s, stamina %.0f",
+                MODALITY, MODALITY == "button" and KEY_DODGE_BTN or (DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK), STAMINA_COST))
+        end
+        return false
+    end)
+end
+
 -- ================= hot reload (dev only, .hotreload gated) =================
 DodgeMod_BootComplete = DODGE_MOD_GEN
 DodgeMod_Handlers = function() end  -- legacy: re-pointed so old watchers see a handover
--- watches main.lua AND the ini; either changing re-executes the mod
-if devEnabled and devDir ~= nil and cfgPath ~= nil then
+-- watches main.lua only; the ini has its own always-on watcher above
+if devEnabled and devDir ~= nil then
     local sep = (string.find(devDir, "\\", 1, true) ~= nil) and "\\" or "/"
     local selfPath = devDir .. sep .. "main.lua"
-    local WatchMain, WatchIni = nil, nil
+    local WatchMain = nil
     pcall(function()
         local h1 = io.open(selfPath, "rb"); if h1 ~= nil then WatchMain = h1:read("*a"); h1:close() end
-        local h2 = io.open(cfgPath, "rb"); if h2 ~= nil then WatchIni = h2:read("*a"); h2:close() end
     end)
     LoopAsync(1200, function()
         if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
-        local newMain, newIni
+        local newMain
         pcall(function()
             local h1 = io.open(selfPath, "rb"); if h1 ~= nil then newMain = h1:read("*a"); h1:close() end
-            local h2 = io.open(cfgPath, "rb"); if h2 ~= nil then newIni = h2:read("*a"); h2:close() end
         end)
-        local mainChanged = newMain ~= nil and newMain ~= WatchMain
-        local iniChanged = newIni ~= nil and WatchIni ~= nil and newIni ~= WatchIni
-        if not mainChanged and not iniChanged then return false end
-        WatchMain, WatchIni = newMain, WatchIni
-        DevLog(mainChanged and "hot reload: main.lua changed" or "hot reload: ini changed")
+        if newMain == nil or newMain == WatchMain then return false end
+        WatchMain = newMain
+        DevLog("hot reload: main.lua changed")
         DodgeMod_Generation = DODGE_MOD_GEN + 1
         local oldHandlers = DodgeMod_Handlers
         local okR, errR = pcall(dofile, selfPath)

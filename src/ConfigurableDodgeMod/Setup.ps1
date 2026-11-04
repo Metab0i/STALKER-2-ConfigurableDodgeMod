@@ -1,9 +1,9 @@
 # Configurable Dodge Mod - interactive setup
-# Writes ConfigurableDodgeMod.ini next to this mod's folder.
+# Writes ConfigurableDodgeMod.ini next to this script's folder.
 # Everything can also be edited by hand in that file - it applies live.
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $PSScriptRoot
+$root = $PSScriptRoot  # this script lives in the mod folder, next to the ini
 $ini = Join-Path $root "ConfigurableDodgeMod.ini"
 Add-Type -AssemblyName System.Windows.Forms
 
@@ -13,13 +13,18 @@ using System;
 using System.Runtime.InteropServices;
 public static class CapInput {
     [DllImport("user32.dll")] public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc cb, IntPtr hMod, uint dwThreadId);
+    [DllImport("user32.dll")] public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc cb, IntPtr hMod, uint dwThreadId);
     [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(IntPtr hhk);
     [DllImport("user32.dll")] public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
     [DllImport("kernel32.dll")] public static extern IntPtr GetModuleHandle(string name);
     public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+    public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
     public struct MSLL { public uint vk; public uint mouseData; public uint flags; public uint time; public IntPtr extra; }
+    public struct KBDLL { public uint vkCode; public uint scanCode; public uint flags; public uint time; public IntPtr extra; }
     public static string Captured = null;
-    public static IntPtr Hook(int id, LowLevelMouseProc cb) { return SetWindowsHookEx(id, cb, GetModuleHandle(null), 0); }
+    public static int CapturedVK = -1;
+    public static IntPtr HookMouse(int id, LowLevelMouseProc cb) { return SetWindowsHookEx(id, cb, GetModuleHandle(null), 0); }
+    public static IntPtr HookKeyboard(int id, LowLevelKeyboardProc cb) { return SetWindowsHookEx(id, cb, GetModuleHandle(null), 0); }
     public static IntPtr MouseProc(int nCode, IntPtr wParam, IntPtr lParam) {
         if (nCode >= 0 && Captured == null) {
             MSLL info = (MSLL)Marshal.PtrToStructure(lParam, typeof(MSLL));
@@ -33,80 +38,67 @@ public static class CapInput {
         }
         return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
     }
+    public static IntPtr KeyboardProc(int nCode, IntPtr wParam, IntPtr lParam) {
+        if (nCode >= 0 && CapturedVK < 0) {
+            int msg = (int)wParam;
+            if (msg == 0x0100 || msg == 0x0104) {   // WM_KEYDOWN, WM_SYSKEYDOWN
+                KBDLL k = (KBDLL)Marshal.PtrToStructure(lParam, typeof(KBDLL));
+                CapturedVK = (int)k.vkCode;
+            }
+        }
+        return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+    }
 }
 "@
 
-$VK_ENTER = 13
-$VK_ESCAPE = 27
-
-function Test-ModifierName([string]$name) {
-    $u = $name.ToUpper() -replace '[^A-Z0-9]', ''
-    return ($u -match 'ALT$' -or $u -match 'CTRL$' -or $u -match 'SHIFT$' -or $u -match 'MENU$' -or $u -eq 'ALT' -or $u -eq 'CTRL' -or $u -eq 'SHIFT')
+function Get-VKName([int]$vk) {
+    if ($vk -ge 0x41 -and $vk -le 0x5A) { return [string][char]$vk }
+    if ($vk -ge 0x30 -and $vk -le 0x39) { return [string][char]$vk }
+    if ($vk -ge 0x70 -and $vk -le 0x7B) { return "F" + ($vk - 0x6F) }
+    switch ($vk) {
+        0x20 { 'Space' } 0x0D { 'Enter' } 0x1B { 'Escape' } 0x09 { 'Tab' } 0x14 { 'CapsLock' } 0x08 { 'Backspace' }
+        0x26 { 'Up' } 0x28 { 'Down' } 0x25 { 'Left' } 0x27 { 'Right' }
+        0xA0 { 'Left Shift' } 0xA1 { 'Right Shift' } 0xA2 { 'Left Ctrl' } 0xA3 { 'Right Ctrl' }
+        0xA4 { 'Left Alt' } 0xA5 { 'Right Alt' } 0x5B { 'Left Win' } 0x5C { 'Right Win' }
+        default { 'VK 0x{0:X2}' -f $vk }
+    }
 }
 
-# ConsoleKey / mouse -> Virtual-Key code (hex string), for the ini
-$VK_HEX = @{
-    Space = '0x20'; Enter = '0x0D'; Escape = '0x1B'; Tab = '0x09'; CapsLock = '0x14'; Back = '0x08'
-    Up = '0x26'; Down = '0x28'; Left = '0x25'; Right = '0x27'
-    OemMinus = '0xBD'; Oemplus = '0xBB'; Oemcomma = '0xBC'; OemPeriod = '0xBE'; Oemtilde = '0xC0'
-    Oem1 = '0xBA'; Oem2 = '0xBF'; Oem4 = '0xDB'; Oem5 = '0xDC'; Oem6 = '0xDD'; Oem7 = '0xDE'; Oem102 = '0xE2'
-    LShiftKey = '0xA0'; RShiftKey = '0xA1'; LControlKey = '0xA2'; RControlKey = '0xA3'
-    LMenu = '0xA4'; RMenu = '0xA5'
+$MouseHex = @{
+    LeftMouseButton = '0x01'; RightMouseButton = '0x02'; MiddleMouseButton = '0x04'
+    ThumbMouseButton = '0x05'; ThumbMouseButton2 = '0x06'
 }
-1..12 | ForEach-Object { $VK_HEX["F$_"] = '0x{0:X2}' -f (0x6F + $_) }
-function Convert-ToVKHex([string]$name) {
-    $n = $name.Trim()
-    if ($VK_HEX.ContainsKey($n)) { return $VK_HEX[$n] }
-    if ($n.Length -eq 1 -and $n -cmatch '[A-Z]') { return '0x{0:X2}' -f [int][char]$n }
-    if ($n.Length -eq 2 -and $n -match '^D[0-9]$') { return '0x{0:X2}' -f (0x30 + [int]$n.Substring(1)) }
-    if ($n -match '^NumPad([0-9])$') { return '0x{0:X2}' -f (0x60 + [int]$matches[1]) }
-    return $null
-}
+
 function Capture-KeyOrMouse([string]$default, [string]$label) {
-    :outer while ($true) {
+    while ($true) {
         Write-Host ""
         Write-Host "  $label" -ForegroundColor Cyan
-        Write-Host "  Press any keyboard key or mouse button now (Enter = keep '$default', Esc = cancel)..."
-        [System.Windows.Forms.Application]::DoEvents()
-        $script:CapInput_Captured = $null
-        $hhk = [CapInput]::Hook(14, [CapInput+LowLevelMouseProc]::MouseProc)  # WH_MOUSE_LL
+        Write-Host "  Press any key (Alt/Ctrl/Shift included) or mouse button now."
+        Write-Host "  Enter = keep '$default', Esc = cancel."
+        [CapInput]::Captured = $null
+        [CapInput]::CapturedVK = -1
+        $hkMouse = [CapInput]::HookMouse(14, [CapInput+LowLevelMouseProc]::MouseProc)    # WH_MOUSE_LL
+        $hkKey = [CapInput]::HookKeyboard(13, [CapInput+LowLevelKeyboardProc]::KeyboardProc) # WH_KEYBOARD_LL
         try {
             while ($true) {
                 if ([CapInput]::Captured -ne $null) {
                     $name = [CapInput]::Captured
                     Write-Host "  captured: $name" -ForegroundColor Green
-                    $mouseHex = @{ LeftMouseButton = "0x01"; RightMouseButton = "0x02"; MiddleMouseButton = "0x04" }
-                    if ($mouseHex.ContainsKey($name)) { return $mouseHex[$name] }
-                    if (Test-ModifierName $name) {
-                        Write-Host "  WARNING: modifier/UI-mouse keys cannot be dodge buttons. Pick another." -ForegroundColor Red
-                        continue outer
-                    }
-                    return (Convert-ToVKHex $name)
+                    return $MouseHex[$name]
                 }
-                if ([Console]::KeyAvailable) {
-                    $k = [Console]::ReadKey($true)
-                    if ($k.Key -eq 'Enter') { Write-Host "  kept $default"; return $default }
-                    if ($k.Key -eq 'Escape') { Write-Host "  kept $default"; return $default }
-                    $name = $k.Key.ToString()
-                    if ($name -eq 'Spacebar') { $name = 'Space' }
-                    elseif ($name -eq 'OemMinus') { $name = 'Minus' }
-                    elseif ($name -eq 'Oemplus') { $name = 'Plus' }
-                    elseif ($name -eq 'Oemcomma') { $name = 'Comma' }
-                    elseif ($name -eq 'OemPeriod') { $name = 'Period' }
-                    elseif ($name -eq 'Oemtilde') { $name = 'Tilde' }
-                    Write-Host "  captured: $name" -ForegroundColor Green
-                    if ((Test-ModifierName $name) -or (($k.Modifiers -band [ConsoleModifiers]::Alt) -ne 0) -or (($k.Modifiers -band [ConsoleModifiers]::Control) -ne 0) -or (($k.Modifiers -band [ConsoleModifiers]::Shift) -ne 0)) {
-                        Write-Host "  WARNING: modifier keys (Alt/Ctrl/Shift) are invisible to UE4SS input hooks and can never be dodge buttons. Pick another." -ForegroundColor Red
-                        continue outer
-                    }
-                    return (Convert-ToVKHex $name)
+                if ([CapInput]::CapturedVK -ge 0) {
+                    $vk = [CapInput]::CapturedVK
+                    if ($vk -eq 0x0D -or $vk -eq 0x1B) { Write-Host "  kept $default"; return $default }
+                    Write-Host ("  captured: {0} (0x{1:X2})" -f (Get-VKName $vk), $vk) -ForegroundColor Green
+                    return ('0x{0:X2}' -f $vk)
                 }
                 [System.Windows.Forms.Application]::DoEvents()
                 Start-Sleep -Milliseconds 10
             }
         }
         finally {
-            [CapInput]::UnhookWindowsHookEx($hhk) | Out-Null
+            [CapInput]::UnhookWindowsHookEx($hkMouse) | Out-Null
+            [CapInput]::UnhookWindowsHookEx($hkKey) | Out-Null
         }
     }
 }
@@ -116,19 +108,17 @@ Write-Host "=============================================" -ForegroundColor Yell
 Write-Host " Configurable Dodge Mod - Setup" -ForegroundColor Yellow
 Write-Host "=============================================" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "Possible keys: A-Z, 0-9, F1-F12, Space, CapsLock, Tab, arrows," -ForegroundColor DarkGray
-Write-Host "Minus, Plus, Comma, Period, Tilde - and mouse buttons:" -ForegroundColor DarkGray
+Write-Host "Any key works: A-Z, 0-9, F1-F12, Space, CapsLock, Tab, arrows," -ForegroundColor DarkGray
+Write-Host "punctuation, and modifiers (Left Alt, Ctrl, Shift) - plus mouse buttons:" -ForegroundColor DarkGray
 Write-Host "  LeftMouseButton / RightMouseButton / MiddleMouseButton /" -ForegroundColor DarkGray
 Write-Host "  ThumbMouseButton (Mouse 4) / ThumbMouseButton2 (Mouse 5)" -ForegroundColor DarkGray
-Write-Host "Full reference: https://ue4ss.org/data-complex/coding-standard#a-name-usage" -ForegroundColor DarkGray
-Write-Host "NOTE: Alt / Ctrl / Shift CAN be used, but they need a small background" -ForegroundColor Yellow
-Write-Host "helper that the mod starts automatically. If the button does not respond" -ForegroundColor Yellow
-Write-Host "in game, restart the game once. If it still does not work, your system is" -ForegroundColor Yellow
-Write-Host "blocking the helper - pick a normal key like X or a mouse button instead." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "Keys are captured live; no typing needed. Modifier keys and mouse" -ForegroundColor Yellow
+Write-Host "buttons are handled by a small listener the mod starts automatically." -ForegroundColor Yellow
 Write-Host ""
 
 # --- read existing values (defaults if missing) ---
-$cur = @{ Modality = "button"; ButtonKey = "ThumbMouseButton2"; DoubleTapLeft = "Z"; DoubleTapRight = "C"; DoubleTapBack = "S"; SideHorizontal = "650"; SideVertical = "500"; BackHorizontal = "900"; BackVertical = "200"; StaminaCost = "20" }
+$cur = @{ Modality = "button"; ButtonKey = "Left Alt"; DoubleTapLeft = "Z"; DoubleTapRight = "C"; DoubleTapBack = "S"; SideHorizontal = "650"; SideVertical = "500"; BackHorizontal = "900"; BackVertical = "200"; StaminaCost = "20"; DoubleTapWindow = "0.25" }
 if (Test-Path $ini) {
     foreach ($line in Get-Content $ini) {
         if ($line -match '^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$' -and $line -notmatch '^\s*;') {
@@ -179,13 +169,14 @@ $content = @(
     "Modality=$($cur['Modality'])",
     "",
     "; --- Button modality ---",
-    "; Key name reference: https://ue4ss.org/data-complex/coding-standard#a-name-usage",
+    "; Any key name, VK hex (0xA4) or mouse button - modifiers work too",
     "ButtonKey=$($cur['ButtonKey'])",
     "",
     "; --- Double-tap modality ---",
     "DoubleTapLeft=$($cur['DoubleTapLeft'])",
     "DoubleTapRight=$($cur['DoubleTapRight'])",
     "DoubleTapBack=$($cur['DoubleTapBack'])",
+    "DoubleTapWindow=$($cur['DoubleTapWindow'])",
     "",
     "; --- Forces (cm/s) and stamina cost (vanilla jump = 20) ---",
     "SideHorizontal=$($cur['SideHorizontal'])",
@@ -198,5 +189,4 @@ $content = @(
 [System.IO.File]::WriteAllLines($ini, $content)
 Write-Host ""
 Write-Host "Saved: $ini" -ForegroundColor Green
-Write-Host "In game the change applies within ~2 seconds (hot reload)."
-Write-Host "If the game is not running, it applies on next launch."
+Write-Host "In game the change applies within ~2 seconds (live reload) - no restart."

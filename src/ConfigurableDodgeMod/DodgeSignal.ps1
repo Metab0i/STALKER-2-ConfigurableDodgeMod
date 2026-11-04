@@ -35,7 +35,7 @@ try { $mutex = [System.Threading.Mutex]::new($true, "DodgeModSignalListener", [r
 if (-not $created) { exit }
 
 # ================= configuration =================
-$root = Split-Path -Parent $PSScriptRoot
+$root = $PSScriptRoot  # this script lives in the mod folder, next to the ini
 $ini = Join-Path $root "ConfigurableDodgeMod.ini"
 $cur = @{
     Modality = "button"; ButtonKey = "Left Alt"
