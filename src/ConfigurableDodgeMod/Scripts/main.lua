@@ -1,11 +1,9 @@
--- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v2.0
--- Standalone: no MCM. Configured via ConfigurableDodgeMod.ini (next to this
--- mod's folder) or the interactive Setup.ps1 that ships with the mod.
---
--- Two modalities, exactly one active (set [Config] Modality in the ini):
---   "button"    - hold a movement key, press the configured dodge button
---   "doubletap" - double-tap the configured dodge keys (Z/C/S by default)
--- The ini is re-read live: save it and changes apply within ~2 seconds.
+-- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v2.2
+-- All key-binding lives in DodgeSignal.ps1 (ships with the mod, started
+-- automatically below): it watches the configured keys at the OS level and
+-- writes press counters to dodge_signals.txt. This script only EXECUTES the
+-- dodge: it polls the counters, reads the movement input for direction, and
+-- launches the character. Config: ConfigurableDodgeMod.ini (live-reloaded).
 
 local UEHelpers = require("UEHelpers")
 
@@ -27,15 +25,24 @@ do
     end
 end
 local devEnabled = false
-if devDir ~= nil then
-    local sep = (string.find(devDir, "\\", 1, true) ~= nil) and "\\" or "/"
-    pcall(function()
-        local h = io.open(devDir .. sep .. ".hotreload", "rb")
-        if h ~= nil then
-            h:close()
-            devEnabled = true
+local cfgPath = nil
+do
+    if devDir ~= nil then
+        local lower = string.lower(devDir)
+        local s = string.match(lower, "()scripts$")
+        if s ~= nil then
+            local root = string.sub(devDir, 1, s - 1)
+            local sep = (string.find(root, "\\", 1, true) ~= nil) and "\\" or "/"
+            cfgPath = root .. "ConfigurableDodgeMod.ini"
+            pcall(function()
+                local h = io.open(root .. ".hotreload", "rb")
+                if h ~= nil then
+                    h:close()
+                    devEnabled = true
+                end
+            end)
         end
-    end)
+    end
 end
 
 local function DevLog(line)
@@ -51,10 +58,9 @@ local function DevLog(line)
 end
 
 -- ================= configuration =================
--- Defaults (the ini overrides them; Setup.ps1 writes the ini)
 local MODALITY        = "button"           -- "button" or "doubletap"
-local KEY_DODGE_BTN   = "Left Alt"         -- button modality
-local DT_LEFT         = "Z"                -- double-tap modality
+local KEY_DODGE_BTN   = "Left Alt"
+local DT_LEFT         = "Z"
 local DT_RIGHT        = "C"
 local DT_BACK         = "S"
 local SIDE_SPEED      = 650.0
@@ -63,25 +69,8 @@ local BACK_SPEED      = 900.0
 local BACK_UP         = 200.0
 local STAMINA_COST    = 20.0
 local REQUIRE_STAMINA = true
-
 local DOUBLE_TAP_WINDOW = 0.25
 local COOLDOWN          = 0.60
-local ENABLE_BACK       = true
-
--- mod root (Scripts/..) - the ini lives there
-local cfgPath = nil
-do
-    if devDir ~= nil then
-        local lower = string.lower(devDir)
-        local s = string.match(lower, "()scripts$")
-        if s ~= nil then
-            cfgPath = string.sub(devDir, 1, s - 1) .. "ConfigurableDodgeMod.ini"
-        else
-            local sep = (string.find(devDir, "\\", 1, true) ~= nil) and "\\" or "/"
-            cfgPath = devDir .. sep .. ".." .. sep .. "ConfigurableDodgeMod.ini"
-        end
-    end
-end
 
 local function Trim(s)
     return (string.gsub(s or "", "^%s*(.-)%s*$", "%1"))
@@ -121,6 +110,7 @@ local function ApplyConfig(content)
     BACK_SPEED   = num("BackHorizontal", BACK_SPEED)
     BACK_UP      = num("BackVertical", BACK_UP)
     STAMINA_COST = num("StaminaCost", STAMINA_COST)
+    DOUBLE_TAP_WINDOW = num("DoubleTapWindow", DOUBLE_TAP_WINDOW)
 end
 
 local iniContent = nil
@@ -134,6 +124,12 @@ if cfgPath ~= nil then
     end)
 end
 if iniContent ~= nil then ApplyConfig(iniContent) end
+
+-- signal file (written by DodgeSignal.ps1, read below)
+local signalPath = nil
+if cfgPath ~= nil then
+    signalPath = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "dodge_signals.txt")
+end
 
 -- ================= dodge logic =================
 -- cached player controller: UEHelpers.GetPlayerController() runs an uncached
@@ -153,7 +149,6 @@ local function GetPC()
     return nil
 end
 
-local lastTap   = { left = 0.0, right = 0.0, back = 0.0 }
 local lastDodge = 0.0
 local lastStaminaMsg = 0.0
 
@@ -226,7 +221,7 @@ local function DoDodge(direction)
         if PC.bShowMouseCursor then blocked = true end
     end)
     if blocked then
-        lastTap.left, lastTap.right, lastTap.back = 0.0, 0.0, 0.0
+        DevLog("blocked: menu UI")
         return
     end
 
@@ -234,12 +229,10 @@ local function DoDodge(direction)
     if Velocity == nil then return end
 
     if not SpendStamina(Pawn) then
-        lastTap.left, lastTap.right, lastTap.back = 0.0, 0.0, 0.0
         return
     end
 
     lastDodge = Now()
-    lastTap.left, lastTap.right, lastTap.back = 0.0, 0.0, 0.0
     DevLog(string.format("dodge dir=%s (handler %.3f ms)", tostring(direction), (Now() - dodgeT0) * 1000))
 
     ExecuteInGameThread(function()
@@ -252,7 +245,7 @@ local function DoDodge(direction)
     end)
 end
 
--- cached movement component (for the live movement input vector)
+-- cached movement component (live movement input vector)
 local lastInputComponentCache = nil
 
 local function GetMoveInputComponent(Pawn)
@@ -270,7 +263,6 @@ local function GetMoveInputComponent(Pawn)
 end
 
 --- which direction is the player's movement input currently pressed in?
---- (the game's own input state, so it follows the game's bindings)
 local function GetMoveInputDirection()
     local PC = GetPC()
     if PC == nil then return nil end
@@ -324,126 +316,61 @@ local function HandleButtonPress()
     DevLog(string.format("press: dodge dir=%s handler=%.3f ms", d, (Now() - t0) * 1000))
 end
 
---- double-tap modality tap (keybind callback)
-local function HandleTap(direction)
-    if MODALITY ~= "doubletap" then return end
-    local t = Now()
-    if t - lastTap[direction] <= DOUBLE_TAP_WINDOW then
-        lastTap[direction] = 0.0
-        DoDodge(direction)
-    else
-        lastTap[direction] = t
-    end
-end
+-- ================= signal file polling =================
+-- DodgeSignal.ps1 maintains press counters for the configured keys:
+--   btn=N (button modality)  dtl=N dtr=N dtb=N (double-tap modality)
+-- A counter increase = a (double-)tap completed in the listener; we dodge.
+local signalLast = {}
+local signalMissingNoticed = false
 
--- ================= input delivery =================
--- The canonical MCM keybind delivery: a BP actor with an "Any Key" input
--- event receives EVERY keypress in gameplay (modifiers included - Left Alt
--- included), and the mod compares GetKeyDisplayName against the configured
--- key. The MCM manager actor is always in the world with input enabled, so
--- we hook ITS AnyKey event functions - found at runtime by iterating live
--- UFunction objects (static name lookups fail for these).
-local function KeyNorm(s)
-    return string.upper(string.gsub(s or "", "[^%w]", ""))
-end
-
-local ANYKEY_HOOKED = false
-
-function HookAnyKeyEvents()
-    if ANYKEY_HOOKED then return end
-    local hooked = 0
+LoopAsync(50, function()
+    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
+    if signalPath == nil then return false end
+    local content
     pcall(function()
-        local all = FindAllOf("Function")
-        local seen = {}
-        for _, f in pairs(all or {}) do
-            local okn, fn = pcall(function() return f:GetFullName() end)
-            if okn and type(fn) == "string" and string.find(fn, "InpActEvt_AnyKey", 1, true) and string.find(fn, "BP_MCM_Manager_C", 1, true) then
-                if seen[fn] == nil then
-                    seen[fn] = true
-                    -- GetFullName includes an object-type prefix and uses the
-                    -- dump's separators; strip the prefix and try both class
-                    -- separator variants. This UE4SS build's RegisterHook
-                    -- requires pre AND post callbacks (3 args).
-                    local bare = string.gsub(fn, "^%w+%s+", "")
-                    local dotted = string.gsub(bare, "^(.-):([%w_]+_C:)", "%1.%2")
-                    local fulldot = string.gsub(dotted, "(_C):", "%1.")
-                    local function OnKey(_, Key)
-                        local name = nil
-                        pcall(function()
-                            local k = Key:get()
-                            name = k.KeyName:ToString()
-                        end)
-                        if name ~= nil and name ~= "" then
-                            DodgeMod_Dispatch("anykey", name)
-                        end
-                    end
-                    local function Empty() end
-                    local okH, errH = pcall(function()
-                        RegisterHook(bare, OnKey, Empty)
-                    end)
-                    if not okH then
-                        okH, errH = pcall(function()
-                            RegisterHook(dotted, OnKey, Empty)
-                        end)
-                    end
-                    DevLog("anykey hook attempt: ok=" .. tostring(okH) .. (okH and (" [" .. bare .. "]") or (" err=" .. tostring(errH))))
-                    if okH then hooked = hooked + 1 end
+        local h = io.open(signalPath, "r")
+        if h ~= nil then content = h:read("*a"); h:close() end
+    end)
+    if content == nil then
+        -- listener not running (or starting up): inform once after a grace period
+        if not signalMissingNoticed and GetPC() ~= nil and Now() > 15.0 then
+            signalMissingNoticed = true
+            local msg = "Dodge keys are inactive: the key listener is not running. Restart the game once (the mod starts it automatically), or run Listener.bat in the mod folder."
+            print("[Configurable Dodge Mod] " .. msg)
+            pcall(function()
+                local PC = GetPC()
+                if PC ~= nil then
+                    UEHelpers.GetKismetSystemLibrary():PrintString(PC, msg, true, false, { R = 1.0, G = 0.6, B = 0.2, A = 1.0 }, 10.0)
+                end
+            end)
+        end
+        return false
+    end
+    signalMissingNoticed = false
+
+    for line in string.gmatch(content, "[^\r\n]+") do
+        local k, v = string.match(line, "^%s*(%w+)%s*=%s*(%d+)%s*$")
+        if k ~= nil then
+            local n = tonumber(v)
+            local last = signalLast[k]
+            if last == nil then
+                signalLast[k] = n
+            elseif n > last then
+                signalLast[k] = n
+                if k == "btn" and MODALITY == "button" then
+                    HandleButtonPress()
+                elseif k == "dtl" and MODALITY == "doubletap" then
+                    DoDodge("left")
+                elseif k == "dtr" and MODALITY == "doubletap" then
+                    DoDodge("right")
+                elseif k == "dtb" and MODALITY == "doubletap" then
+                    DoDodge("back")
                 end
             end
         end
-    end)
-    if hooked > 0 then
-        ANYKEY_HOOKED = true
-        DevLog("anykey hooks registered: " .. hooked)
     end
-end
-
--- mouse buttons: window-message hooks DO deliver in gameplay (verified),
--- so mouse-configured dodge buttons use them directly
-local MOUSE_ALIASES = {
-    THUMBMOUSEBUTTON  = "XBUTTON_ONE",
-    THUMBMOUSEBUTTON2 = "XBUTTON_TWO",
-    MOUSE4            = "XBUTTON_ONE",
-    MOUSE5            = "XBUTTON_TWO",
-    MOUSEBUTTON4      = "XBUTTON_ONE",
-    MOUSEBUTTON5      = "XBUTTON_TWO",
-}
-
-local keyNameToValue = {}
-for name, value in pairs(Key) do
-    keyNameToValue[string.upper(name)] = value
-end
-
-local function ResolveMouseKey(displayName)
-    local name = KeyNorm(displayName)
-    local alias = MOUSE_ALIASES[name]
-    if alias ~= nil then return keyNameToValue[alias] end
-    return keyNameToValue[name]
-end
-
-DodgeMod_BoundMouse = DodgeMod_BoundMouse or {}
-
-local function EnsureMouseBinds()
-    if MODALITY ~= "button" then return end
-    local n = KeyNorm(KEY_DODGE_BTN)
-    if not MOUSE_ALIASES[n] and not (n == "LEFTMOUSEBUTTON" or n == "RIGHTMOUSEBUTTON" or n == "MIDDLEMOUSEBUTTON") then return end
-    if DodgeMod_BoundMouse[n] then return end
-    local vk = ResolveMouseKey(KEY_DODGE_BTN)
-    if vk == nil then return end
-    DodgeMod_BoundMouse[n] = true
-    pcall(function()
-        RegisterKeyBind(vk, function() HandleButtonPress() end)
-    end)
-    DevLog("mouse dodge button bound: " .. KEY_DODGE_BTN)
-end
-
-EnsureMouseBinds()
-
-function DodgeMod_Dispatch(role, keyUpper)
-    local H = DodgeMod_Handlers
-    if H == nil then return end
-    H(role, keyUpper)
-end
+    return false
+end)
 
 -- ================= movement double-tap (doubletap modality bonus) =========
 -- double-tapping a movement direction itself dodges (A/A, D/D, S/S) - read
@@ -474,69 +401,23 @@ LoopAsync(60, function()
     return false
 end)
 
-
--- the modifier listener, baked into this file as an EncodedCommand payload
--- (UTF16LE base64 of ModifierListener.ps1 - no separate script ships)
-local LISTENER_B64 =
-    "IwAgAEMAbwBuAGYAaQBnAHUAcgBhAGIAbABlACAARABvAGQAZwBlACAATQBvAGQAIAAtACAAbQBvAGQAaQBmAGkAZQByACAAawBlAHkAIABsAGkAcwB0AGUAbgBlAHIAIAAoAHYAMwAsACAAZwBlAG4AZQByAGkAYwApAAoAIwAgAFcAYQB0AGMAaABlAHMAIABBAEwA"
-  ..     "TAAgAG0AbwBkAGkAZgBpAGUAcgAgAGsAZQB5AHMAIABhAHQAIAB0AGgAZQAgAE8AUwAgAGwAZQB2AGUAbAAgACgARwBlAHQAQQBzAHkAbgBjAEsAZQB5AFMAdABhAHQAZQAgAC0AIABVAEUANABTAFMAJwBzACAAaQBuAHAAdQB0AAoAIwAgAGgAbwBvAGsAIABjAGEA"
-  ..     "bgBuAG8AdAAgAHMAZQBlACAAdABoAGUAbQApACAAYQBuAGQAIAB0AHIAYQBuAHMAbABhAHQAZQBzACAAZQBhAGMAaAAgAHAAcgBlAHMAcwAgAGkAbgB0AG8AIABhACAAcwB5AG4AdABoAGUAdABpAGMAIABGADEAMwAtAEYAMQA4AAoAIwAgAGsAZQB5AHAAcgBlAHMA"
-  ..     "cwAsACAAdwBoAGkAYwBoACAAVQBFADQAUwBTACAAZABlAGwAaQB2AGUAcgBzACAAcgBlAGwAaQBhAGIAbAB5AC4AIABUAGgAZQAgAG0AbwBkACAAYgBpAG4AZABzACAAdABoAG8AcwBlACAARgAtAGsAZQB5AHMALgAKACMAIABTAHQAYQByAHQAZQBkACAAYQB1AHQA"
-  ..     "bwBtAGEAdABpAGMAYQBsAGwAeQAgAGIAeQAgAHQAaABlACAAbQBvAGQAIABhAHQAIABnAGEAbQBlACAAYgBvAG8AdAAuACAARQB4AGkAdABzACAAdwBoAGUAbgAgAHQAaABlACAAZwBhAG0AZQAgAGMAbABvAHMAZQBzAC4ACgAjACAAUgBlAGYAdQBzAGUAcwAgAHQA"
-  ..     "bwAgAHIAdQBuACAAdAB3AGkAYwBlACAAKABtAHUAdABlAHgAKQAuAAoACgBBAGQAZAAtAFQAeQBwAGUAIABAACIACgB1AHMAaQBuAGcAIABTAHkAcwB0AGUAbQA7AAoAdQBzAGkAbgBnACAAUwB5AHMAdABlAG0ALgBSAHUAbgB0AGkAbQBlAC4ASQBuAHQAZQByAG8A"
-  ..     "cABTAGUAcgB2AGkAYwBlAHMAOwAKAHAAdQBiAGwAaQBjACAAcwB0AGEAdABpAGMAIABjAGwAYQBzAHMAIABNAG8AZABMAGkAcwB0AGUAbgAgAHsACgAgACAAIAAgAFsARABsAGwASQBtAHAAbwByAHQAKAAiAHUAcwBlAHIAMwAyAC4AZABsAGwAIgApAF0AIABwAHUA"
-  ..     "YgBsAGkAYwAgAHMAdABhAHQAaQBjACAAZQB4AHQAZQByAG4AIABzAGgAbwByAHQAIABHAGUAdABBAHMAeQBuAGMASwBlAHkAUwB0AGEAdABlACgAaQBuAHQAIAB2AEsAZQB5ACkAOwAKACAAIAAgACAAWwBEAGwAbABJAG0AcABvAHIAdAAoACIAdQBzAGUAcgAzADIA"
-  ..     "LgBkAGwAbAAiACkAXQAgAHAAdQBiAGwAaQBjACAAcwB0AGEAdABpAGMAIABlAHgAdABlAHIAbgAgAHUAaQBuAHQAIABTAGUAbgBkAEkAbgBwAHUAdAAoAHUAaQBuAHQAIABuACwAIABJAE4AUABVAFQAWwBdACAAcAAsACAAaQBuAHQAIABzAGkAegBlACkAOwAKACAA"
-  ..     "IAAgACAAWwBEAGwAbABJAG0AcABvAHIAdAAoACIAawBlAHIAbgBlAGwAMwAyAC4AZABsAGwAIgApAF0AIABwAHUAYgBsAGkAYwAgAHMAdABhAHQAaQBjACAAZQB4AHQAZQByAG4AIABiAG8AbwBsACAAQwByAGUAYQB0AGUATQB1AHQAZQB4ACgASQBuAHQAUAB0AHIA"
-  ..     "IABhAHQAdAByACwAIABiAG8AbwBsACAAaQBuAGkAdABpAGEAbAAsACAAcwB0AHIAaQBuAGcAIABuAGEAbQBlACkAOwAKACAAIAAgACAAWwBTAHQAcgB1AGMAdABMAGEAeQBvAHUAdAAoAEwAYQB5AG8AdQB0AEsAaQBuAGQALgBTAGUAcQB1AGUAbgB0AGkAYQBsACkA"
-  ..     "XQAgAHAAdQBiAGwAaQBjACAAcwB0AHIAdQBjAHQAIABLAEUAWQBCAEQASQBOAFAAVQBUACAAewAgAHAAdQBiAGwAaQBjACAAdQBzAGgAbwByAHQAIAB2AGsAOwAgAHAAdQBiAGwAaQBjACAAdQBzAGgAbwByAHQAIABzAGMAYQBuADsAIABwAHUAYgBsAGkAYwAgAHUA"
-  ..     "aQBuAHQAIABmAGwAYQBnAHMAOwAgAHAAdQBiAGwAaQBjACAAdQBpAG4AdAAgAHQAaQBtAGUAOwAgAHAAdQBiAGwAaQBjACAASQBuAHQAUAB0AHIAIABlAHgAdAByAGEAOwAgAH0ACgAgACAAIAAgAFsAUwB0AHIAdQBjAHQATABhAHkAbwB1AHQAKABMAGEAeQBvAHUA"
-  ..     "dABLAGkAbgBkAC4AUwBlAHEAdQBlAG4AdABpAGEAbAApAF0AIABwAHUAYgBsAGkAYwAgAHMAdAByAHUAYwB0ACAASQBOAFAAVQBUACAAewAgAHAAdQBiAGwAaQBjACAAdQBpAG4AdAAgAHQAeQBwAGUAOwAgAHAAdQBiAGwAaQBjACAASwBFAFkAQgBEAEkATgBQAFUA"
-  ..     "VAAgAGsAaQA7ACAAcAB1AGIAbABpAGMAIAB1AGwAbwBuAGcAIABwAGEAZAA7ACAAfQAKACAAIAAgACAAcAB1AGIAbABpAGMAIABzAHQAYQB0AGkAYwAgAHYAbwBpAGQAIABUAGEAcAAoAHUAcwBoAG8AcgB0ACAAdgBrACkAIAB7AAoAIAAgACAAIAAgACAAIAAgAEkA"
-  ..     "TgBQAFUAVABbAF0AIABkACAAPQAgAG4AZQB3ACAASQBOAFAAVQBUAFsAMQBdADsAIABkAFsAMABdAC4AdAB5AHAAZQAgAD0AIAAxADsAIABkAFsAMABdAC4AawBpAC4AdgBrACAAPQAgAHYAawA7AAoAIAAgACAAIAAgACAAIAAgAFMAZQBuAGQASQBuAHAAdQB0ACgA"
-  ..     "MQAsACAAZAAsACAATQBhAHIAcwBoAGEAbAAuAFMAaQB6AGUATwBmACgAdAB5AHAAZQBvAGYAKABJAE4AUABVAFQAKQApACkAOwAKACAAIAAgACAAIAAgACAAIABTAHkAcwB0AGUAbQAuAFQAaAByAGUAYQBkAGkAbgBnAC4AVABoAHIAZQBhAGQALgBTAGwAZQBlAHAA"
-  ..     "KAAzADAAKQA7AAoAIAAgACAAIAAgACAAIAAgAEkATgBQAFUAVABbAF0AIAB1ACAAPQAgAG4AZQB3ACAASQBOAFAAVQBUAFsAMQBdADsAIAB1AFsAMABdAC4AdAB5AHAAZQAgAD0AIAAxADsAIAB1AFsAMABdAC4AawBpACAAPQAgAG4AZQB3ACAASwBFAFkAQgBEAEkA"
-  ..     "TgBQAFUAVAAgAHsAIAB2AGsAIAA9ACAAdgBrACwAIABmAGwAYQBnAHMAIAA9ACAAMgAgAH0AOwAKACAAIAAgACAAIAAgACAAIABTAGUAbgBkAEkAbgBwAHUAdAAoADEALAAgAHUALAAgAE0AYQByAHMAaABhAGwALgBTAGkAegBlAE8AZgAoAHQAeQBwAGUAbwBmACgA"
-  ..     "SQBOAFAAVQBUACkAKQApADsACgAgACAAIAAgAH0ACgB9AAoAIgBAAAoACgAkAGMAcgBlAGEAdABlAGQAIAA9ACAAJABmAGEAbABzAGUACgB0AHIAeQAgAHsAIAAkAG0AdQB0AGUAeAAgAD0AIABbAFMAeQBzAHQAZQBtAC4AVABoAHIAZQBhAGQAaQBuAGcALgBNAHUA"
-  ..     "dABlAHgAXQA6ADoAbgBlAHcAKAAkAHQAcgB1AGUALAAgACIARABvAGQAZwBlAE0AbwBkAE0AbwBkAGkAZgBpAGUAcgBMAGkAcwB0AGUAbgBlAHIAIgAsACAAWwByAGUAZgBdACQAYwByAGUAYQB0AGUAZAApACAAfQAgAGMAYQB0AGMAaAAgAHsAIAAkAGMAcgBlAGEA"
-  ..     "dABlAGQAIAA9ACAAJAB0AHIAdQBlACAAfQAKAGkAZgAgACgALQBuAG8AdAAgACQAYwByAGUAYQB0AGUAZAApACAAewAgAGUAeABpAHQAIAB9AAoACgAjACAAbQBvAGQAaQBmAGkAZQByACAAVgBLACAALQA+ACAAcwB5AG4AdABoAGUAdABpAGMAIABGAC0AawBlAHkA"
-  ..     "IABWAEsAIAAoAHAAcgBpAHYAYQB0AGUAIABjAGgAYQBuAG4AZQBsACwAIABuAG8AIABrAGUAeQBiAG8AYQByAGQAIABoAGEAcwAgAEYAMQAzACsAKQAKACQAbQBhAHAAIAA9ACAAQAB7AAoAIAAgACAAIAAwAHgAQQAwACAAPQAgADAAeAA4ADAAIAAgACMAIABMAGUA"
-  ..     "ZgB0ACAAUwBoAGkAZgB0ACAAIAAtAD4AIABGADEANwAKACAAIAAgACAAMAB4AEEAMQAgAD0AIAAwAHgAOAAxACAAIAAjACAAUgBpAGcAaAB0ACAAUwBoAGkAZgB0ACAALQA+ACAARgAxADgACgAgACAAIAAgADAAeABBADIAIAA9ACAAMAB4ADcARQAgACAAIwAgAEwA"
-  ..     "ZQBmAHQAIABDAHQAcgBsACAAIAAgAC0APgAgAEYAMQA1AAoAIAAgACAAIAAwAHgAQQAzACAAPQAgADAAeAA3AEYAIAAgACMAIABSAGkAZwBoAHQAIABDAHQAcgBsACAAIAAtAD4AIABGADEANgAKACAAIAAgACAAMAB4AEEANAAgAD0AIAAwAHgANwBDACAAIAAjACAA"
-  ..     "TABlAGYAdAAgAEEAbAB0ACAAIAAgACAALQA+ACAARgAxADMACgAgACAAIAAgADAAeABBADUAIAA9ACAAMAB4ADcARAAgACAAIwAgAFIAaQBnAGgAdAAgAEEAbAB0ACAAIAAgAC0APgAgAEYAMQA0AAoAIAAgACAAIAAwAHgAMQAwACAAPQAgADAAeAA3AEMAIAAgACMA"
-  ..     "IABnAGUAbgBlAHIAaQBjACAAUwBoAGkAZgB0AAoAIAAgACAAIAAwAHgAMQAxACAAPQAgADAAeAA3AEUAIAAgACMAIABnAGUAbgBlAHIAaQBjACAAQwB0AHIAbAAKACAAIAAgACAAMAB4ADEAMgAgAD0AIAAwAHgANwBDACAAIAAjACAAZwBlAG4AZQByAGkAYwAgAEEA"
-  ..     "bAB0AAoAfQAKACQAdwBhAHMARABvAHcAbgAgAD0AIABAAHsAfQAKACQAbQBvAGQAVgBLAHMAIAA9ACAAQAAoACQAbQBhAHAALgBLAGUAeQBzACkACgAKAFcAcgBpAHQAZQAtAEgAbwBzAHQAIAAiAE0AbwBkAGkAZgBpAGUAcgAgAGsAZQB5ACAAbABpAHMAdABlAG4A"
-  ..     "ZQByACAAcgB1AG4AbgBpAG4AZwAgACgAQQBsAHQALwBDAHQAcgBsAC8AUwBoAGkAZgB0ACAALQA+ACAAZABvAGQAZwBlACAAaQBuAHAAdQB0AHMAKQAuACIACgBXAHIAaQB0AGUALQBIAG8AcwB0ACAAIgBBAHUAdABvAC0AZQB4AGkAdABzACAAdwBoAGUAbgAgAHQA"
-  ..     "aABlACAAZwBhAG0AZQAgAGMAbABvAHMAZQBzAC4AIgAKAAoAdwBoAGkAbABlACAAKAAkAHQAcgB1AGUAKQAgAHsACgAgACAAIAAgAGYAbwByAGUAYQBjAGgAIAAoACQAbQB2AGsAIABpAG4AIAAkAG0AbwBkAFYASwBzACkAIAB7AAoAIAAgACAAIAAgACAAIAAgACQA"
-  ..     "ZABvAHcAbgAgAD0AIAAoACgAWwBNAG8AZABMAGkAcwB0AGUAbgBdADoAOgBHAGUAdABBAHMAeQBuAGMASwBlAHkAUwB0AGEAdABlACgAJABtAHYAawApACAALQBiAGEAbgBkACAAMAB4ADgAMAAwADAAKQAgAC0AbgBlACAAMAApAAoAIAAgACAAIAAgACAAIAAgAGkA"
-  ..     "ZgAgACgAJABkAG8AdwBuACAALQBhAG4AZAAgAC0AbgBvAHQAIAAkAHcAYQBzAEQAbwB3AG4AWwAkAG0AdgBrAF0AKQAgAHsACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAE0AbwBkAEwAaQBzAHQAZQBuAF0AOgA6AFQAYQBwACgAWwBiAHkAdABlAF0AJABtAGEA"
-  ..     "cABbACQAbQB2AGsAXQApAAoAIAAgACAAIAAgACAAIAAgAH0ACgAgACAAIAAgACAAIAAgACAAJAB3AGEAcwBEAG8AdwBuAFsAJABtAHYAawBdACAAPQAgACQAZABvAHcAbgAKACAAIAAgACAAfQAKAAoAIAAgACAAIAAjACAAYQB1AHQAbwAtAGUAeABpAHQAIAB3AGgA"
-  ..     "ZQBuACAAdABoAGUAIABnAGEAbQBlACAAYwBsAG8AcwBlAHMACgAgACAAIAAgACQAYQBsAGkAdgBlACAAPQAgACQAZgBhAGwAcwBlAAoAIAAgACAAIABmAG8AcgBlAGEAYwBoACAAKAAkAG4AIABpAG4AIABAACgAJwBTAHQAYQBsAGsAZQByADIALQBXAGkAbgA2ADQA"
-  ..     "LQBTAGgAaQBwAHAAaQBuAGcAJwAsACAAJwBTAHQAYQBsAGsAZQByADIAJwApACkAIAB7AAoAIAAgACAAIAAgACAAIAAgAGkAZgAgACgARwBlAHQALQBQAHIAbwBjAGUAcwBzACAALQBOAGEAbQBlACAAJABuACAALQBFAHIAcgBvAHIAQQBjAHQAaQBvAG4AIABTAGkA"
-  ..     "bABlAG4AdABsAHkAQwBvAG4AdABpAG4AdQBlACkAIAB7ACAAJABhAGwAaQB2AGUAIAA9ACAAJAB0AHIAdQBlADsAIABiAHIAZQBhAGsAIAB9AAoAIAAgACAAIAB9AAoAIAAgACAAIABpAGYAIAAoAC0AbgBvAHQAIAAkAGEAbABpAHYAZQApACAAewAgAGIAcgBlAGEA"
-  ..     "awAgAH0ACgAgACAAIAAgAFMAdABhAHIAdAAtAFMAbABlAGUAcAAgAC0ATQBpAGwAbABpAHMAZQBjAG8AbgBkAHMAIAAyADUACgB9AAoA"
-
--- ================= boot =================
--- modifier keys (Left Alt etc.) cannot be bound via UE4SS hooks; when one is
--- configured, the mod auto-starts the companion listener (which translates
--- each modifier press into a synthetic Mouse 4 press - mouse delivery is
--- verified working in gameplay) and binds Mouse 4 as the dodge button
-local modifierButton = false
-do
-    local n = string.upper(string.gsub(KEY_DODGE_BTN, "[^%w]", ""))
-    if n == "LEFTALT" or n == "LALT" or n == "ALT" or n == "RIGHTALT" or n == "RALT" or n == "LEFTCONTROL" or n == "LCTRL" or n == "CTRL" or n == "RIGHTCONTROL" or n == "RCTRL" or n == "LEFTSHIFT" or n == "LSHIFT" or n == "SHIFT" or n == "RIGHTSHIFT" or n == "RSHIFT" then modifierButton = true end
+-- ================= auto-start the signal listener =================
+-- (os.execute verified available; the listener is mutex-guarded, so double
+-- spawns are harmless, and it auto-exits when the game closes)
+if os ~= nil and type(os.execute) == "function" and signalPath ~= nil then
+    local listenerPath = string.gsub(signalPath, "dodge_signals%.txt$", "DodgeSignal.ps1")
+    pcall(function()
+        os.execute('start "" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. listenerPath .. '"')
+    end)
+    DevLog("signal listener auto-started")
 end
-if MODALITY == "button" and modifierButton then
-    KEY_DODGE_BTN = "ThumbMouseButton"  -- the listener taps Mouse 4; bind that
-    if cfgPath ~= nil and os ~= nil and type(os.execute) == "function" then
-        local listenerPath = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "ModifierListener.ps1")
-        pcall(function()
-            os.execute('start "DodgeModListener" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. listenerPath .. '"')
-        end)
-        print("[Configurable Dodge Mod] dodge button: " .. KEY_DODGE_BTN .. " via modifier key (listener started automatically)")
-        DevLog("modifier listener auto-started, dodge button bound to Mouse 4")
-    end
-end
+
+print(string.format("[Configurable Dodge Mod] v2.2 loaded - mode: %s (%s), stamina cost %.0f",
+    MODALITY,
+    MODALITY == "button" and ("dodge button " .. KEY_DODGE_BTN) or ("double-tap " .. DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK),
+    STAMINA_COST))
+DevLog(string.format("boot v2.2 gen=%d mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
+
 -- ================= hot reload (dev only, .hotreload gated) =================
 -- watches main.lua AND the ini; either changing re-executes the mod
 if devEnabled and devDir ~= nil and cfgPath ~= nil then
@@ -570,54 +451,4 @@ if devEnabled and devDir ~= nil and cfgPath ~= nil then
         return true
     end)
     DevLog("hot reload active")
-end
-
--- ================= dispatcher wiring (must stay last) =================
--- role "anykey": the MCM manager's AnyKey input events (fire on every
--- keypress in gameplay, modifiers included). Key names arrive as engine
--- KeyNames ("LeftAlt", "X", "ThumbMouseButton2") and are compared against
--- the normalized ini config.
-DodgeMod_Handlers = function(role, keyUpper)
-    if role == "anykey" then
-        local inUI = false
-        pcall(function()
-            local PC = GetPC()
-            if PC ~= nil and PC:IsValid() then inUI = PC.bShowMouseCursor end
-        end)
-        if inUI then return end
-        if MODALITY == "button" then
-            if keyUpper == KeyNorm(KEY_DODGE_BTN) then
-                HandleButtonPress()
-            end
-        else
-            if keyUpper == KeyNorm(DT_LEFT) then
-                HandleTap("left")
-            elseif keyUpper == KeyNorm(DT_RIGHT) then
-                HandleTap("right")
-            elseif ENABLE_BACK and keyUpper == KeyNorm(DT_BACK) then
-                HandleTap("back")
-            end
-        end
-    elseif role == "mouse" then
-        -- mouse-configured dodge buttons (window hooks, verified in gameplay)
-        if MODALITY == "button" and keyUpper == KeyNorm(KEY_DODGE_BTN) then
-            HandleButtonPress()
-        end
-    end
-end
-DevLog("dispatcher wired gen=" .. tostring(DODGE_MOD_GEN))
-
--- TEST: os.execute availability (for auto-starting the Alt listener)
-if devEnabled then
-    DevLog("probe: type(os.execute)=" .. type(os and os.execute))
-    local testFile = cfgPath and (string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "os_execute_test.txt")) or "os_execute_test.txt"
-    pcall(function()
-        os.execute('cmd /c echo ok > "' .. testFile .. '"')
-    end)
-    local content = nil
-    pcall(function()
-        local h = io.open(testFile, "r")
-        if h ~= nil then content = h:read("*a"); h:close() end
-    end)
-    DevLog("probe: os.execute wrote file: " .. tostring(content ~= nil))
 end
