@@ -337,18 +337,55 @@ local function HandleTap(direction)
 end
 
 -- ================= input delivery =================
--- UE4SS has NO working keybind unregister, and its window-message hooks can
--- be unreliable in gameplay after world loads. So: each unique key is bound
--- exactly once per session with a thin callback routing through globals
--- (DodgeMod_Dispatch -> DodgeMod_Handlers, re-pointed by every reload), and
--- the hooks are re-registered whenever a new PlayerController spawns.
-DodgeMod_BoundKeys = DodgeMod_BoundKeys or {}
-
-local keyNameToValue = {}
-for name, value in pairs(Key) do
-    keyNameToValue[string.upper(name)] = value
+-- The canonical MCM keybind delivery: a BP actor with an "Any Key" input
+-- event receives EVERY keypress in gameplay (modifiers included - Left Alt
+-- included), and the mod compares GetKeyDisplayName against the configured
+-- key. The MCM manager actor is always in the world with input enabled, so
+-- we hook ITS AnyKey event functions - found at runtime by iterating live
+-- UFunction objects (static name lookups fail for these).
+local function KeyNorm(s)
+    return string.upper(string.gsub(s or "", "[^%w]", ""))
 end
 
+local ANYKEY_HOOKED = false
+
+function HookAnyKeyEvents()
+    if ANYKEY_HOOKED then return end
+    local hooked = 0
+    pcall(function()
+        local all = FindAllOf("Function")
+        local seen = {}
+        for _, f in pairs(all or {}) do
+            local okn, fn = pcall(function() return f:GetFullName() end)
+            if okn and type(fn) == "string" and string.find(fn, "InpActEvt_AnyKey", 1, true) and string.find(fn, "BP_MCM_Manager_C", 1, true) then
+                if seen[fn] == nil then
+                    seen[fn] = true
+                    local okH, errH = pcall(function()
+                        RegisterHook(fn, function(_, Key)
+                            local name = nil
+                            pcall(function()
+                                local k = Key:get()
+                                name = k.KeyName:ToString()
+                            end)
+                            if name ~= nil and name ~= "" then
+                                DodgeMod_Dispatch("anykey", name)
+                            end
+                        end)
+                    end)
+                    DevLog("anykey hook [" .. fn .. "]: ok=" .. tostring(okH) .. (okH and "" or (" err=" .. tostring(errH))))
+                    if okH then hooked = hooked + 1 end
+                end
+            end
+        end
+    end)
+    if hooked > 0 then
+        ANYKEY_HOOKED = true
+        DevLog("anykey hooks registered: " .. hooked)
+    end
+end
+
+-- mouse buttons: window-message hooks DO deliver in gameplay (verified),
+-- so mouse-configured dodge buttons use them directly
 local MOUSE_ALIASES = {
     THUMBMOUSEBUTTON  = "XBUTTON_ONE",
     THUMBMOUSEBUTTON2 = "XBUTTON_TWO",
@@ -358,35 +395,32 @@ local MOUSE_ALIASES = {
     MOUSEBUTTON5      = "XBUTTON_TWO",
 }
 
-local function ResolveKey(displayName)
-    if type(displayName) ~= "string" or displayName == "" then return nil end
-    -- Virtual-Key hex values (e.g. 0x58 = X, 0x05 = Mouse 4) bind directly.
-    -- MODIFIER VKs (0xA0-0xA5, 0x10-0x12: Alt/Ctrl/Shift) register but never
-    -- fire: they generate WM_SYSKEYDOWN which UE4SS does not process
-    -- (verified live, boot-context registration). Reject them loudly.
-    local hexv = string.match(string.upper(displayName), "^0X([0-9A-F][0-9A-F]?)$")
-    if hexv ~= nil then
-        local v = tonumber(hexv, 16)
-        if v ~= nil and v >= 1 and v <= 0xFE then
-            if (v >= 0xA0 and v <= 0xA5) or (v >= 0x10 and v <= 0x12) then
-                return nil, "modifier keys (Alt/Ctrl/Shift) generate WM_SYSKEYDOWN which UE4SS does not process"
-            end
-            return v
-        end
-        return nil
-    end
-    if type(displayName) ~= "string" or displayName == "" then return nil end
-    local name = string.upper(displayName)
-    local v = keyNameToValue[name]
-    if v ~= nil then return v end
-    v = keyNameToValue[string.gsub(name, "%s+", "_")]
-    if v ~= nil then return v end
-    local collapsed = string.gsub(name, "[^%w]", "")
-    v = keyNameToValue[collapsed]
-    if v ~= nil then return v end
-    local alias = MOUSE_ALIASES[collapsed]
+local keyNameToValue = {}
+for name, value in pairs(Key) do
+    keyNameToValue[string.upper(name)] = value
+end
+
+local function ResolveMouseKey(displayName)
+    local name = KeyNorm(displayName)
+    local alias = MOUSE_ALIASES[name]
     if alias ~= nil then return keyNameToValue[alias] end
-    return nil
+    return keyNameToValue[name]
+end
+
+DodgeMod_BoundMouse = DodgeMod_BoundMouse or {}
+
+local function EnsureMouseBinds()
+    if MODALITY ~= "button" then return end
+    local n = KeyNorm(KEY_DODGE_BTN)
+    if not MOUSE_ALIASES[n] and not (n == "LEFTMOUSEBUTTON" or n == "RIGHTMOUSEBUTTON" or n == "MIDDLEMOUSEBUTTON") then return end
+    if DodgeMod_BoundMouse[n] then return end
+    local vk = ResolveMouseKey(KEY_DODGE_BTN)
+    if vk == nil then return end
+    DodgeMod_BoundMouse[n] = true
+    pcall(function()
+        RegisterKeyBind(vk, function() HandleButtonPress() end)
+    end)
+    DevLog("mouse dodge button bound: " .. KEY_DODGE_BTN)
 end
 
 function DodgeMod_Dispatch(role, keyUpper)
@@ -394,50 +428,6 @@ function DodgeMod_Dispatch(role, keyUpper)
     if H == nil then return end
     H(role, keyUpper)
 end
-
-local function EnsureBind(role, displayName)
-    if type(displayName) ~= "string" or displayName == "" then return end
-    local u = string.upper(displayName)
-    if DodgeMod_BoundKeys[u] ~= nil then return end
-    local k = ResolveKey(displayName)
-    if k == nil then
-        print("[Configurable Dodge Mod] cannot bind " .. role .. " key '" .. displayName .. "' (not a bindable key - modifiers like Alt are not supported; try a mouse button or another key)")
-        return
-    end
-    DodgeMod_BoundKeys[u] = role
-    local ok = pcall(function()
-        RegisterKeyBind(k, function() DodgeMod_Dispatch(role, u) end)
-    end)
-    if not ok then
-        DodgeMod_BoundKeys[u] = nil
-        print("[Configurable Dodge Mod] RegisterKeyBind failed for " .. role .. " key: " .. displayName)
-    else
-        DevLog("bound role=" .. role .. " key=" .. displayName)
-    end
-end
-
-function RebindKeys()
-    if MODALITY == "doubletap" then
-        EnsureBind("dt_left", DT_LEFT)
-        EnsureBind("dt_right", DT_RIGHT)
-        if ENABLE_BACK then EnsureBind("dt_back", DT_BACK) end
-    else
-        EnsureBind("button", KEY_DODGE_BTN)
-    end
-end
-
--- re-register hooks when the world changes (new PlayerController spawned):
--- heals the flaky gameplay delivery without stacking more than one bind per
--- world load, and name-filtered dispatch keeps stale callbacks harmless
-local lastRebindAt = 0.0
-NotifyOnNewObject("/Script/Engine.PlayerController", function()
-    local t = Now()
-    if t - lastRebindAt < 5.0 then return end
-    lastRebindAt = t
-    DodgeMod_BoundKeys = {}
-    RebindKeys()
-    DevLog("re-registered keybinds (new PlayerController)")
-end)
 
 -- ================= movement double-tap (doubletap modality bonus) =========
 -- double-tapping a movement direction itself dodges (A/A, D/D, S/S) - read
@@ -468,8 +458,14 @@ LoopAsync(60, function()
     return false
 end)
 
+
 -- ================= boot =================
-RebindKeys()
+-- the MCM manager spawns per world; retry the AnyKey hooks until it exists
+LoopAsync(4000, function()
+    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
+    if not ANYKEY_HOOKED then HookAnyKeyEvents() end
+    return false
+end)
 
 print(string.format("[Configurable Dodge Mod] v2.0 loaded - mode: %s (%s), stamina cost %.0f",
     MODALITY,
@@ -513,31 +509,36 @@ if devEnabled and devDir ~= nil and cfgPath ~= nil then
 end
 
 -- ================= dispatcher wiring (must stay last) =================
+-- role "anykey": the MCM manager's AnyKey input events (fire on every
+-- keypress in gameplay, modifiers included). Key names arrive as engine
+-- KeyNames ("LeftAlt", "X", "ThumbMouseButton2") and are compared against
+-- the normalized ini config.
 DodgeMod_Handlers = function(role, keyUpper)
-    if MODALITY == "doubletap" then
-        if role == "dt_left" and keyUpper == string.upper(DT_LEFT) then
-            HandleTap("left")
-        elseif role == "dt_right" and keyUpper == string.upper(DT_RIGHT) then
-            HandleTap("right")
-        elseif role == "dt_back" and keyUpper == string.upper(DT_BACK) then
-            HandleTap("back")
+    if role == "anykey" then
+        local inUI = false
+        pcall(function()
+            local PC = GetPC()
+            if PC ~= nil and PC:IsValid() then inUI = PC.bShowMouseCursor end
+        end)
+        if inUI then return end
+        if MODALITY == "button" then
+            if keyUpper == KeyNorm(KEY_DODGE_BTN) then
+                HandleButtonPress()
+            end
+        else
+            if keyUpper == KeyNorm(DT_LEFT) then
+                HandleTap("left")
+            elseif keyUpper == KeyNorm(DT_RIGHT) then
+                HandleTap("right")
+            elseif ENABLE_BACK and keyUpper == KeyNorm(DT_BACK) then
+                HandleTap("back")
+            end
         end
-        return
-    end
-    if role == "button" and keyUpper == string.upper(KEY_DODGE_BTN) then
-        HandleButtonPress()
+    elseif role == "mouse" then
+        -- mouse-configured dodge buttons (window hooks, verified in gameplay)
+        if MODALITY == "button" and keyUpper == KeyNorm(KEY_DODGE_BTN) then
+            HandleButtonPress()
+        end
     end
 end
 DevLog("dispatcher wired gen=" .. tostring(DODGE_MOD_GEN))
-
--- TEST: does an Input table exist?
-if devEnabled then
-    DevLog("probe: type(Input)=" .. type(Input))
-    if type(Input) == "table" then
-        for _, n in ipairs({ "IsKeyPressed", "IsKeyDown", "GetKey", "WasKeyPressed" }) do
-            DevLog("probe: Input." .. n .. " = " .. type(Input[n]))
-        end
-        local ok, r = pcall(function() return Input.IsKeyPressed(0x58) end)
-        DevLog("probe: IsKeyPressed(0x58) -> " .. tostring(ok) .. " / " .. tostring(r))
-    end
-end
