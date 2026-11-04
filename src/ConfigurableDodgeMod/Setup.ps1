@@ -132,6 +132,16 @@ function Clear-ConsoleInput {
         while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
     } catch { }
 }
+# Key values are stored as VK hex for exactness, with the plain-English name
+# as an inline ";" comment so the ini stays readable:
+#   ButtonKey=0x58   ; X
+function Format-KeyEntry([string]$value) {
+    if ($value -match '^0[xX]([0-9A-Fa-f]{1,2})$') {
+        $vk = [Convert]::ToInt32($matches[1], 16)
+        return ('{0}   ; {1}' -f $value, (Get-VKName $vk))
+    }
+    return $value
+}
 # ================= numeric input with validation =================
 function ConvertTo-Number([string]$text) {
     $value = 0.0
@@ -171,9 +181,11 @@ Write-Host "=============================================" -ForegroundColor Yell
 Write-Host " Configurable Dodge Mod - Setup" -ForegroundColor Yellow
 Write-Host "=============================================" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "Keys are captured live - just press them. Any key works, including" -ForegroundColor DarkGray
-Write-Host "modifiers (Left Alt / Ctrl / Shift), F-keys, arrows and mouse buttons:" -ForegroundColor DarkGray
-Write-Host "  LeftMouseButton / RightMouseButton / MiddleMouseButton / ThumbMouseButton (4) / ThumbMouseButton2 (5)" -ForegroundColor DarkGray
+Write-Host "Keys are captured live - just press them. Any key works:" -ForegroundColor DarkGray
+Write-Host "  - modifiers: Left Alt / Right Alt / Ctrl / Shift" -ForegroundColor DarkGray
+Write-Host "  - letters, digits, F1-F12, arrows, Home/End/PgUp/PgDn, Insert/Delete" -ForegroundColor DarkGray
+Write-Host "  - mouse: LeftMouseButton, RightMouseButton, MiddleMouseButton," -ForegroundColor DarkGray
+Write-Host "           ThumbMouseButton (Mouse 4), ThumbMouseButton2 (Mouse 5)" -ForegroundColor DarkGray
 Write-Host ""
 
 # --- read existing values (defaults if missing) ---
@@ -181,7 +193,7 @@ $cur = @{ Modality = "button"; ButtonKey = "Left Alt"; DoubleTapLeft = "Z"; Doub
 if (Test-Path $ini) {
     foreach ($line in Get-Content $ini) {
         if ($line -match '^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$' -and $line -notmatch '^\s*;') {
-            $cur[$matches[1]] = $matches[2]
+            $cur[$matches[1]] = ($matches[2] -replace '\s*;.*$', '').Trim()
         }
     }
 }
@@ -259,12 +271,12 @@ $content = @(
     "",
     "; --- Button modality ---",
     "; Any key name, VK hex (0xA4) or mouse button - modifiers work too",
-    "ButtonKey=$($cur['ButtonKey'])",
+    "ButtonKey=$(Format-KeyEntry $cur['ButtonKey'])",
     "",
     "; --- Double-tap modality ---",
-    "DoubleTapLeft=$($cur['DoubleTapLeft'])",
-    "DoubleTapRight=$($cur['DoubleTapRight'])",
-    "DoubleTapBack=$($cur['DoubleTapBack'])",
+    "DoubleTapLeft=$(Format-KeyEntry $cur['DoubleTapLeft'])",
+    "DoubleTapRight=$(Format-KeyEntry $cur['DoubleTapRight'])",
+    "DoubleTapBack=$(Format-KeyEntry $cur['DoubleTapBack'])",
     "DoubleTapWindow=$($cur['DoubleTapWindow'])",
     "",
     "; --- Directional and vertical forces (cm/s) and stamina cost (vanilla jump = 20) ---",

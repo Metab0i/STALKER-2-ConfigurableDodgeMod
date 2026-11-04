@@ -82,7 +82,7 @@ local function ParseIniValue(content, key)
         if not string.match(line, "^%s*;") and not string.match(line, "^%s*%[") then
             local k, v = string.match(line, "^%s*([%w_]+)%s*=%s*(.-)%s*$")
             if k ~= nil and string.upper(k) == string.upper(key) then
-                return v
+                return (string.gsub(v, "%s*;.*$", ""))
             end
         end
     end

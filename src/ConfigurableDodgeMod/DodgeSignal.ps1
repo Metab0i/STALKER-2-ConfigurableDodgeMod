@@ -46,7 +46,7 @@ function Read-Ini {
     if (-not (Test-Path $ini)) { return }
     foreach ($line in Get-Content $ini -ErrorAction SilentlyContinue) {
         if ($line -match '^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$' -and $line -notmatch '^\s*;') {
-            $cur[$matches[1]] = $matches[2]
+            $cur[$matches[1]] = ($matches[2] -replace '\s*;.*$', '').Trim()
         }
     }
 }
