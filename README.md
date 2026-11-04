@@ -29,13 +29,22 @@ Because capture happens at the OS level, keyboard keys, modifiers
 
 ## Install
 
-1. Copy the `ConfigurableDodgeMod` folder into
-   `Stalker2\Binaries\Win64\ue4ss\Mods\`
-2. Add `ConfigurableDodgeMod : 1` to `ue4ss\Mods\mods.txt`
-3. Launch the game. Default: hold **A/D/S** + press **Left Alt**.
+### Full package (UE4SS not installed)
 
-The `_full` package includes the UE4SS runtime and the update 2.x
-compatibility fix.
+1. Copy the contents of the zip into
+   `Stalker2\Binaries\Win64\` - the folder containing
+   `Stalker2-Win64-Shipping.exe`.
+2. Launch the game. Done - the package includes a UE4SS runtime with the
+   update 2.x compatibility fix.
+
+### Mod-only package (UE4SS already installed)
+
+1. Copy the `ConfigurableDodgeMod` folder into
+   `Stalker2\Binaries\Win64\ue4ss\Mods\`.
+2. Add `ConfigurableDodgeMod : 1` to `ue4ss\Mods\mods.txt`.
+3. Launch the game.
+
+Default controls: hold **A/D/S** and press **Left Alt** to dodge.
 
 ## Use
 

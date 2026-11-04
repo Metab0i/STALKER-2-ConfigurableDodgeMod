@@ -40,6 +40,9 @@ Default controls: hold [b]A / D / S[/b] and press [b]Left Alt[/b]. Forward-only 
 [*][size=3][color=#D4D4D8][url=https://www.nexusmods.com/stalker2heartofchornobyl/mods/2341]RE-UE4SS Compatibility Fix for Update 2.0 (UE5.5) v1.2[/url] - included in the full package[/color][/size][/*]
 [/list]
 
+[size=4][b]Source[/b][/size][size=3][color=#D4D4D8]
+[url=https://github.com/Metab0i/STALKER-2-ConfigurableDodgeMod]github.com/Metab0i/STALKER-2-ConfigurableDodgeMod[/url]
+
 [size=4][b]Shout outs[/b][/size][size=3][color=#D4D4D8]
 rbwadle for the original [url=https://www.nexusmods.com/stalker2heartofchornobyl/mods/1243]Dodge mod[/url] idea.
 RE-UE4SS team, and the community compatibility effort for STALKER 2's UE 5.5.4 build.
