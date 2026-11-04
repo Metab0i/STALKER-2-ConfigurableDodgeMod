@@ -5,6 +5,11 @@
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot  # this script lives in the mod folder, next to the ini
 $ini = Join-Path $root "ConfigurableDodgeMod.ini"
+if (-not (Test-Path $ini)) {
+    # fall back to the working directory, then create next to the script
+    $cwdIni = Join-Path (Get-Location).Path "ConfigurableDodgeMod.ini"
+    if (Test-Path $cwdIni) { $ini = $cwdIni }
+}
 $inv = [Globalization.CultureInfo]::InvariantCulture
 
 # ================= input capture =================
@@ -16,6 +21,8 @@ using System;
 using System.Runtime.InteropServices;
 public static class CapIn {
     [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
+    [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
 }
 "@
 $MouseVK = @{
@@ -64,18 +71,35 @@ function Capture-KeyOrMouse([string]$default, [string]$label) {
     Write-Host "  $label" -ForegroundColor Cyan
     Write-Host "  Press the key or mouse button now. Enter = keep '$default', Esc = cancel."
 
-    # wait until no keyboard key is held (the Enter that answered the previous
-    # prompt may still be down for a few milliseconds)
-    $releaseDeadline = [DateTime]::UtcNow.AddSeconds(2)
-    while ([DateTime]::UtcNow -lt $releaseDeadline) {
-        $held = $false
-        foreach ($vk in $CandidateVK) { if (Test-KeyDown $vk) { $held = $true; break } }
-        if (-not $held) { break }
-        Start-Sleep -Milliseconds 20
-    }
-
+    # Snapshot the current key state, then briefly settle. A key pressed
+    # during the settle MUST still count (pressing right after the prompt
+    # must not be lost); keys already held are ignored until released, so
+    # the Enter that answered the previous prompt cannot leak in.
     $prev = @{}
     foreach ($vk in $CandidateVK) { $prev[$vk] = (Test-KeyDown $vk) }
+    $settleDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    $quiet = $false
+    while (-not $quiet -and [DateTime]::UtcNow -lt $settleDeadline) {
+        $quiet = $true
+        foreach ($vk in $CandidateVK) {
+            $down = Test-KeyDown $vk
+            if ($down -and -not $prev[$vk]) {
+                if ($vk -eq 0x0D -or $vk -eq 0x1B) {
+                    Write-Host "  kept $default"
+                    return $default
+                }
+                if ($MouseVK.ContainsKey($vk)) {
+                    Write-Host ("  captured: {0}" -f $MouseVK[$vk]) -ForegroundColor Green
+                    return $MouseVK[$vk]
+                }
+                Write-Host ("  captured: {0} (0x{1:X2})" -f (Get-VKName $vk), $vk) -ForegroundColor Green
+                return ('0x{0:X2}' -f $vk)
+            }
+            if ($down) { $quiet = $false }
+            $prev[$vk] = $down
+        }
+        if (-not $quiet) { Start-Sleep -Milliseconds 15 }
+    }
 
     while ($true) {
         foreach ($vk in $CandidateVK) {
