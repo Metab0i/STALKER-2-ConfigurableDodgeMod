@@ -1,7 +1,7 @@
 [size=4][b]Description[/b][/size][size=3][color=#D4D4D8]
 Configurable Dodge Mod adds a stamina-based dodge to S.T.A.L.K.E.R. 2. Hold a movement key and press the dodge button (Left Alt by default) - or double-tap your dodge keys - and Skif dodges left, right or back, camera-relative. Every key and force value is configurable live; no MCM needed.[/color][/size]
 
-[youtube]KpYUs2ZFAlU[/youtube]
+[youtube]aLGJFVEcolc[/youtube]
 
 [size=4][b]Installation[/b][/size][size=3][color=#D4D4D8]
 [i]Full package (no UE4SS yet):[/i] copy the zip contents into

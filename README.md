@@ -8,7 +8,7 @@ camera. Each dodge costs stamina. Every key and force value is configurable.
 
 ## Demo
 
-[![Dodging demo video](https://img.youtube.com/vi/KpYUs2ZFAlU/0.jpg)](https://www.youtube.com/watch?v=KpYUs2ZFAlU)
+[![Dodging demo video](https://img.youtube.com/vi/aLGJFVEcolc/0.jpg)](https://www.youtube.com/watch?v=aLGJFVEcolc)
 
 ## How button capture works
 
