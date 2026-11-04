@@ -360,19 +360,33 @@ function HookAnyKeyEvents()
             if okn and type(fn) == "string" and string.find(fn, "InpActEvt_AnyKey", 1, true) and string.find(fn, "BP_MCM_Manager_C", 1, true) then
                 if seen[fn] == nil then
                     seen[fn] = true
-                    local okH, errH = pcall(function()
-                        RegisterHook(fn, function(_, Key)
-                            local name = nil
-                            pcall(function()
-                                local k = Key:get()
-                                name = k.KeyName:ToString()
-                            end)
-                            if name ~= nil and name ~= "" then
-                                DodgeMod_Dispatch("anykey", name)
-                            end
+                    -- GetFullName includes an object-type prefix and uses the
+                    -- dump's separators; strip the prefix and try both class
+                    -- separator variants. This UE4SS build's RegisterHook
+                    -- requires pre AND post callbacks (3 args).
+                    local bare = string.gsub(fn, "^%w+%s+", "")
+                    local dotted = string.gsub(bare, "^(.-):([%w_]+_C:)", "%1.%2")
+                    local fulldot = string.gsub(dotted, "(_C):", "%1.")
+                    local function OnKey(_, Key)
+                        local name = nil
+                        pcall(function()
+                            local k = Key:get()
+                            name = k.KeyName:ToString()
                         end)
+                        if name ~= nil and name ~= "" then
+                            DodgeMod_Dispatch("anykey", name)
+                        end
+                    end
+                    local function Empty() end
+                    local okH, errH = pcall(function()
+                        RegisterHook(bare, OnKey, Empty)
                     end)
-                    DevLog("anykey hook [" .. fn .. "]: ok=" .. tostring(okH) .. (okH and "" or (" err=" .. tostring(errH))))
+                    if not okH then
+                        okH, errH = pcall(function()
+                            RegisterHook(dotted, OnKey, Empty)
+                        end)
+                    end
+                    DevLog("anykey hook attempt: ok=" .. tostring(okH) .. (okH and (" [" .. bare .. "]") or (" err=" .. tostring(errH))))
                     if okH then hooked = hooked + 1 end
                 end
             end
@@ -423,6 +437,8 @@ local function EnsureMouseBinds()
     DevLog("mouse dodge button bound: " .. KEY_DODGE_BTN)
 end
 
+EnsureMouseBinds()
+
 function DodgeMod_Dispatch(role, keyUpper)
     local H = DodgeMod_Handlers
     if H == nil then return end
@@ -459,6 +475,30 @@ LoopAsync(60, function()
 end)
 
 
+-- ================= modifier-key delivery (flag file) =================
+-- UE4SS cannot see modifier keys (Alt) in gameplay. The shipped
+-- LeftAltListener.ps1 (start via Listener.bat) watches Left Alt at the OS
+-- level and writes a press counter to alt_press.txt in the mod root; this
+-- loop converts new presses into dodges.
+local lastAltCount = nil
+LoopAsync(60, function()
+    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
+    if MODALITY ~= "button" or cfgPath == nil then return false end
+    local flagPath = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "alt_press.txt")
+    local content
+    pcall(function()
+        local h = io.open(flagPath, "r")
+        if h ~= nil then content = h:read("*a"); h:close() end
+    end)
+    local n = tonumber(Trim(content)) or 0
+    if lastAltCount == nil then lastAltCount = n; return false end
+    if n > lastAltCount then
+        lastAltCount = n
+        HandleButtonPress()
+        DevLog("alt flag press -> dodge attempt")
+    end
+    return false
+end)
 -- ================= boot =================
 -- the MCM manager spawns per world; retry the AnyKey hooks until it exists
 LoopAsync(4000, function()
