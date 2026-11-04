@@ -202,7 +202,7 @@ if ($cur["Modality"] -ne "doubletap") { $cur["Modality"] = "button" }
 # --- modality ---
 $resetRequested = $false
 while ($true) {
-    Write-Host "Choose your dodge modality (only one can be active) " -ForegroundColor Cyan -NoNewline
+    Write-Host "Choose your dodge modality " -ForegroundColor Cyan -NoNewline
     Write-Host "[current: $($cur['Modality'])]" -ForegroundColor Yellow
     Write-Host "  1) Dodge button - hold a movement key, press a dodge button"
     Write-Host "  2) Double-tap   - double-tap dodge keys (Z / C / S)"
