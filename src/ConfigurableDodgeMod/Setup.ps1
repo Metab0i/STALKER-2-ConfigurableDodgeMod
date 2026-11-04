@@ -1,106 +1,134 @@
 # Configurable Dodge Mod - interactive setup
-# Writes ConfigurableDodgeMod.ini next to this script's folder.
-# Everything can also be edited by hand in that file - it applies live.
+# Writes ConfigurableDodgeMod.ini next to this script.
+# Everything can also be edited by hand in that file - it applies live in game.
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot  # this script lives in the mod folder, next to the ini
 $ini = Join-Path $root "ConfigurableDodgeMod.ini"
-Add-Type -AssemblyName System.Windows.Forms
+$inv = [Globalization.CultureInfo]::InvariantCulture
 
-# ================= input capture (keyboard + mouse) =================
+# ================= input capture =================
+# Keys and mouse buttons are polled with GetAsyncKeyState - deterministic edge
+# detection that sees every physical key, including bare modifiers
+# (Alt/Ctrl/Shift) which console key reading cannot report.
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class CapInput {
-    [DllImport("user32.dll")] public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc cb, IntPtr hMod, uint dwThreadId);
-    [DllImport("user32.dll")] public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc cb, IntPtr hMod, uint dwThreadId);
-    [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(IntPtr hhk);
-    [DllImport("user32.dll")] public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-    [DllImport("kernel32.dll")] public static extern IntPtr GetModuleHandle(string name);
-    public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
-    public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
-    public struct MSLL { public uint vk; public uint mouseData; public uint flags; public uint time; public IntPtr extra; }
-    public struct KBDLL { public uint vkCode; public uint scanCode; public uint flags; public uint time; public IntPtr extra; }
-    public static string Captured = null;
-    public static int CapturedVK = -1;
-    public static IntPtr HookMouse(int id, LowLevelMouseProc cb) { return SetWindowsHookEx(id, cb, GetModuleHandle(null), 0); }
-    public static IntPtr HookKeyboard(int id, LowLevelKeyboardProc cb) { return SetWindowsHookEx(id, cb, GetModuleHandle(null), 0); }
-    public static IntPtr MouseProc(int nCode, IntPtr wParam, IntPtr lParam) {
-        if (nCode >= 0 && Captured == null) {
-            MSLL info = (MSLL)Marshal.PtrToStructure(lParam, typeof(MSLL));
-            if (wParam == (IntPtr)0x0201) Captured = "LeftMouseButton";       // WM_LBUTTONDOWN
-            else if (wParam == (IntPtr)0x0204) Captured = "RightMouseButton"; // WM_RBUTTONDOWN
-            else if (wParam == (IntPtr)0x0207) Captured = "MiddleMouseButton";// WM_MBUTTONDOWN
-            else if (wParam == (IntPtr)0x020B) {                              // WM_XBUTTONDOWN
-                if ((info.mouseData >> 16) == 1) Captured = "ThumbMouseButton";
-                else Captured = "ThumbMouseButton2";
-            }
-        }
-        return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
-    }
-    public static IntPtr KeyboardProc(int nCode, IntPtr wParam, IntPtr lParam) {
-        if (nCode >= 0 && CapturedVK < 0) {
-            int msg = (int)wParam;
-            if (msg == 0x0100 || msg == 0x0104) {   // WM_KEYDOWN, WM_SYSKEYDOWN
-                KBDLL k = (KBDLL)Marshal.PtrToStructure(lParam, typeof(KBDLL));
-                CapturedVK = (int)k.vkCode;
-            }
-        }
-        return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
-    }
+public static class CapIn {
+    [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
 }
 "@
+$MouseVK = @{
+    0x01 = 'LeftMouseButton'; 0x02 = 'RightMouseButton'; 0x04 = 'MiddleMouseButton'
+    0x05 = 'ThumbMouseButton'; 0x06 = 'ThumbMouseButton2'
+}
+
+# mouse buttons and keyboard keys are both polled
+$CandidateVK = @(0x01, 0x02, 0x04, 0x05, 0x06)  # mouse buttons
+$CandidateVK += 0x08, 0x09, 0x0D, 0x13, 0x14, 0x1B, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2D, 0x2E
+$CandidateVK += 0x30..0x39      # 0-9
+$CandidateVK += 0x41..0x5A      # A-Z
+$CandidateVK += 0x5B, 0x5C      # Win keys
+$CandidateVK += 0x60..0x6F      # numpad
+$CandidateVK += 0x70..0x87      # F1-F24
+$CandidateVK += 0x90, 0x91      # num lock / scroll lock
+$CandidateVK += 0xA0..0xA5      # Shift / Ctrl / Alt (left + right)
+$CandidateVK += 0xBA..0xC0      # OEM punctuation
+$CandidateVK += 0xDB..0xDE      # brackets, backslash, quote
+$CandidateVK += 0xE2
+
+function Test-KeyDown([int]$vk) {
+    return (([CapIn]::GetAsyncKeyState($vk) -band 0x8000) -ne 0)
+}
 
 function Get-VKName([int]$vk) {
+    if ($MouseVK.ContainsKey($vk)) { return $MouseVK[$vk] }
     if ($vk -ge 0x41 -and $vk -le 0x5A) { return [string][char]$vk }
     if ($vk -ge 0x30 -and $vk -le 0x39) { return [string][char]$vk }
-    if ($vk -ge 0x70 -and $vk -le 0x7B) { return "F" + ($vk - 0x6F) }
+    if ($vk -ge 0x70 -and $vk -le 0x87) { return "F" + ($vk - 0x6F) }
     switch ($vk) {
-        0x20 { 'Space' } 0x0D { 'Enter' } 0x1B { 'Escape' } 0x09 { 'Tab' } 0x14 { 'CapsLock' } 0x08 { 'Backspace' }
-        0x26 { 'Up' } 0x28 { 'Down' } 0x25 { 'Left' } 0x27 { 'Right' }
+        0x08 { 'Backspace' } 0x09 { 'Tab' } 0x0D { 'Enter' } 0x13 { 'Pause' } 0x14 { 'CapsLock' }
+        0x1B { 'Escape' } 0x20 { 'Space' } 0x21 { 'PageUp' } 0x22 { 'PageDown' } 0x23 { 'End' } 0x24 { 'Home' }
+        0x25 { 'Left' } 0x26 { 'Up' } 0x27 { 'Right' } 0x28 { 'Down' } 0x2D { 'Insert' } 0x2E { 'Delete' }
+        0x5B { 'Left Win' } 0x5C { 'Right Win' }
         0xA0 { 'Left Shift' } 0xA1 { 'Right Shift' } 0xA2 { 'Left Ctrl' } 0xA3 { 'Right Ctrl' }
-        0xA4 { 'Left Alt' } 0xA5 { 'Right Alt' } 0x5B { 'Left Win' } 0x5C { 'Right Win' }
+        0xA4 { 'Left Alt' } 0xA5 { 'Right Alt' }
+        0xBA { ';' } 0xBB { '=' } 0xBC { ',' } 0xBD { '-' } 0xBE { '.' } 0xBF { '/' } 0xC0 { '`' }
+        0xDB { '[' } 0xDC { '\' } 0xDD { ']' } 0xDE { "'" } 0xE2 { '\' }
         default { 'VK 0x{0:X2}' -f $vk }
     }
 }
 
-$MouseHex = @{
-    LeftMouseButton = '0x01'; RightMouseButton = '0x02'; MiddleMouseButton = '0x04'
-    ThumbMouseButton = '0x05'; ThumbMouseButton2 = '0x06'
+function Capture-KeyOrMouse([string]$default, [string]$label) {
+    Write-Host ""
+    Write-Host "  $label" -ForegroundColor Cyan
+    Write-Host "  Press the key or mouse button now. Enter = keep '$default', Esc = cancel."
+
+    # wait until no keyboard key is held (the Enter that answered the previous
+    # prompt may still be down for a few milliseconds)
+    $releaseDeadline = [DateTime]::UtcNow.AddSeconds(2)
+    while ([DateTime]::UtcNow -lt $releaseDeadline) {
+        $held = $false
+        foreach ($vk in $CandidateVK) { if (Test-KeyDown $vk) { $held = $true; break } }
+        if (-not $held) { break }
+        Start-Sleep -Milliseconds 20
+    }
+
+    $prev = @{}
+    foreach ($vk in $CandidateVK) { $prev[$vk] = (Test-KeyDown $vk) }
+
+    while ($true) {
+        foreach ($vk in $CandidateVK) {
+            $down = Test-KeyDown $vk
+            if ($down -and -not $prev[$vk]) {
+                if ($vk -eq 0x0D -or $vk -eq 0x1B) {
+                    Write-Host "  kept $default"
+                    return $default
+                }
+                if ($MouseVK.ContainsKey($vk)) {
+                    Write-Host ("  captured: {0}" -f $MouseVK[$vk]) -ForegroundColor Green
+                    return $MouseVK[$vk]
+                }
+                Write-Host ("  captured: {0} (0x{1:X2})" -f (Get-VKName $vk), $vk) -ForegroundColor Green
+                return ('0x{0:X2}' -f $vk)
+            }
+            $prev[$vk] = $down
+        }
+        Start-Sleep -Milliseconds 10
+    }
 }
 
-function Capture-KeyOrMouse([string]$default, [string]$label) {
+# ================= numeric input with validation =================
+function ConvertTo-Number([string]$text) {
+    $value = 0.0
+    if ([double]::TryParse($text, [Globalization.NumberStyles]::Float, $inv, [ref]$value)) { return $value }
+    return $null
+}
+
+function Read-ValidNumber([string]$label, [string]$current, [double]$min, [double]$max) {
     while ($true) {
-        Write-Host ""
-        Write-Host "  $label" -ForegroundColor Cyan
-        Write-Host "  Press any key (Alt/Ctrl/Shift included) or mouse button now."
-        Write-Host "  Enter = keep '$default', Esc = cancel."
-        [CapInput]::Captured = $null
-        [CapInput]::CapturedVK = -1
-        $hkMouse = [CapInput]::HookMouse(14, [CapInput+LowLevelMouseProc]::MouseProc)    # WH_MOUSE_LL
-        $hkKey = [CapInput]::HookKeyboard(13, [CapInput+LowLevelKeyboardProc]::KeyboardProc) # WH_KEYBOARD_LL
-        try {
-            while ($true) {
-                if ([CapInput]::Captured -ne $null) {
-                    $name = [CapInput]::Captured
-                    Write-Host "  captured: $name" -ForegroundColor Green
-                    return $MouseHex[$name]
-                }
-                if ([CapInput]::CapturedVK -ge 0) {
-                    $vk = [CapInput]::CapturedVK
-                    if ($vk -eq 0x0D -or $vk -eq 0x1B) { Write-Host "  kept $default"; return $default }
-                    Write-Host ("  captured: {0} (0x{1:X2})" -f (Get-VKName $vk), $vk) -ForegroundColor Green
-                    return ('0x{0:X2}' -f $vk)
-                }
-                [System.Windows.Forms.Application]::DoEvents()
-                Start-Sleep -Milliseconds 10
-            }
+        $entered = Read-Host "  $label [$current]"
+        if ([string]::IsNullOrWhiteSpace($entered)) {
+            $value = ConvertTo-Number $current
+            if ($value -ne $null -and $value -ge $min -and $value -le $max) { return $value }
+            Write-Host "  the current value '$current' is not valid - please type a number ($min-$max)." -ForegroundColor Red
+            continue
         }
-        finally {
-            [CapInput]::UnhookWindowsHookEx($hkMouse) | Out-Null
-            [CapInput]::UnhookWindowsHookEx($hkKey) | Out-Null
+        $value = ConvertTo-Number ($entered.Trim())
+        if ($value -eq $null) {
+            Write-Host "  '$entered' is not a number - try again (example: 650)." -ForegroundColor Red
+            continue
         }
+        if ($value -lt $min -or $value -gt $max) {
+            Write-Host "  $value is out of range - enter a number between $min and $max." -ForegroundColor Red
+            continue
+        }
+        return $value
     }
+}
+
+function Format-Number([double]$value) {
+    return $value.ToString("0.###", $inv)
 }
 
 # ================= banner =================
@@ -108,13 +136,9 @@ Write-Host "=============================================" -ForegroundColor Yell
 Write-Host " Configurable Dodge Mod - Setup" -ForegroundColor Yellow
 Write-Host "=============================================" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "Any key works: A-Z, 0-9, F1-F12, Space, CapsLock, Tab, arrows," -ForegroundColor DarkGray
-Write-Host "punctuation, and modifiers (Left Alt, Ctrl, Shift) - plus mouse buttons:" -ForegroundColor DarkGray
-Write-Host "  LeftMouseButton / RightMouseButton / MiddleMouseButton /" -ForegroundColor DarkGray
-Write-Host "  ThumbMouseButton (Mouse 4) / ThumbMouseButton2 (Mouse 5)" -ForegroundColor DarkGray
-Write-Host ""
-Write-Host "Keys are captured live; no typing needed. Modifier keys and mouse" -ForegroundColor Yellow
-Write-Host "buttons are handled by a small listener the mod starts automatically." -ForegroundColor Yellow
+Write-Host "Keys are captured live - just press them. Any key works, including" -ForegroundColor DarkGray
+Write-Host "modifiers (Left Alt / Ctrl / Shift), F-keys, arrows and mouse buttons:" -ForegroundColor DarkGray
+Write-Host "  LeftMouseButton / RightMouseButton / MiddleMouseButton / ThumbMouseButton (4) / ThumbMouseButton2 (5)" -ForegroundColor DarkGray
 Write-Host ""
 
 # --- read existing values (defaults if missing) ---
@@ -126,14 +150,19 @@ if (Test-Path $ini) {
         }
     }
 }
+if ($cur["Modality"] -ne "doubletap") { $cur["Modality"] = "button" }
 
 # --- modality ---
-Write-Host "Choose your dodge modality (only one can be active):" -ForegroundColor Cyan
-Write-Host "  1) Dodge button - hold a movement key, press a dodge button  [current: $($cur['Modality'])]"
-Write-Host "  2) Double-tap   - double-tap dodge keys (Z / C / S)          [current: $($cur['Modality'])]"
-$mode = Read-Host "1 or 2 [Enter = keep $($cur['Modality'])]"
-if ($mode -eq "1") { $cur["Modality"] = "button" }
-elseif ($mode -eq "2") { $cur["Modality"] = "doubletap" }
+while ($true) {
+    Write-Host "Choose your dodge modality (only one can be active):" -ForegroundColor Cyan
+    Write-Host "  1) Dodge button - hold a movement key, press a dodge button  [current: $($cur['Modality'])]"
+    Write-Host "  2) Double-tap   - double-tap dodge keys (Z / C / S)          [current: $($cur['Modality'])]"
+    $mode = Read-Host "1 or 2 [Enter = keep $($cur['Modality'])]"
+    if ([string]::IsNullOrWhiteSpace($mode)) { break }
+    if ($mode.Trim() -eq "1") { $cur["Modality"] = "button"; break }
+    if ($mode.Trim() -eq "2") { $cur["Modality"] = "doubletap"; break }
+    Write-Host "  please type 1 or 2 (or press Enter to keep the current mode)." -ForegroundColor Red
+}
 
 # --- keys (captured, not typed) ---
 if ($cur["Modality"] -eq "button") {
@@ -144,19 +173,17 @@ if ($cur["Modality"] -eq "button") {
     $cur["DoubleTapBack"]  = Capture-KeyOrMouse $cur["DoubleTapBack"]  "DOUBLE-TAP BACK key:"
 }
 
-# --- forces + stamina ---
+# --- forces + stamina (validated) ---
 Write-Host ""
 Write-Host "Forces (cm/s) and stamina - type a number, or Enter to keep:" -ForegroundColor Cyan
-$cur["SideHorizontal"] = Read-Host "  Side dodge horizontal [$($cur['SideHorizontal'])]"
-if ([string]::IsNullOrWhiteSpace($cur["SideHorizontal"])) { $cur["SideHorizontal"] = "650" }
-$cur["SideVertical"]   = Read-Host "  Side dodge vertical   [$($cur['SideVertical'])]"
-if ([string]::IsNullOrWhiteSpace($cur["SideVertical"])) { $cur["SideVertical"] = "500" }
-$cur["BackHorizontal"] = Read-Host "  Back dodge horizontal [$($cur['BackHorizontal'])]"
-if ([string]::IsNullOrWhiteSpace($cur["BackHorizontal"])) { $cur["BackHorizontal"] = "900" }
-$cur["BackVertical"]   = Read-Host "  Back dodge vertical   [$($cur['BackVertical'])]"
-if ([string]::IsNullOrWhiteSpace($cur["BackVertical"])) { $cur["BackVertical"] = "200" }
-$cur["StaminaCost"]    = Read-Host "  Stamina cost          [$($cur['StaminaCost'])]"
-if ([string]::IsNullOrWhiteSpace($cur["StaminaCost"])) { $cur["StaminaCost"] = "20" }
+$cur["SideHorizontal"] = Format-Number (Read-ValidNumber "Side dodge horizontal" $cur["SideHorizontal"] 1 10000)
+$cur["SideVertical"]   = Format-Number (Read-ValidNumber "Side dodge vertical"   $cur["SideVertical"]   0 10000)
+$cur["BackHorizontal"] = Format-Number (Read-ValidNumber "Back dodge horizontal" $cur["BackHorizontal"] 1 10000)
+$cur["BackVertical"]   = Format-Number (Read-ValidNumber "Back dodge vertical"   $cur["BackVertical"]   0 10000)
+$cur["StaminaCost"]    = Format-Number (Read-ValidNumber "Stamina cost"          $cur["StaminaCost"]    0 1000)
+
+$window = ConvertTo-Number $cur["DoubleTapWindow"]
+if ($window -eq $null -or $window -le 0 -or $window -gt 5) { $cur["DoubleTapWindow"] = "0.25" }
 
 # --- write ---
 $content = @(
