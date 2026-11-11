@@ -157,8 +157,6 @@ while ($hGame -eq [IntPtr]::Zero) {
         Start-Sleep -Milliseconds 500
     }
 }
-Write-Host "Dodge input listener running (modality: $($cur['Modality']), game pid $gamePid)."
-Write-Host "Exits automatically when the game terminates."
 
 # ================= pipe server =================
 # One-shot protocol: the Lua client opens the pipe, we write exactly one

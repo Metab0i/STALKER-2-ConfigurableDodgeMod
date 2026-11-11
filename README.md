@@ -77,7 +77,7 @@ Or edit **`ConfigurableDodgeMod.ini`** directly:
 | `Modality` | `button` or `doubletap` | `button` |
 | `ButtonKey` | dodge button (name, VK hex or mouse button) | `Left Alt` |
 | `DoubleTapLeft/Right/Back` | double-tap keys | `Z` / `C` / `S` |
-| `DoubleTapWindow` | max seconds between taps | `0.25` |
+| `DoubleTapWindow` | max seconds between taps | `0.13` |
 | `SideHorizontal/SideVertical` | side dodge force (cm/s) | `650` / `500` |
 | `BackHorizontal/BackVertical` | back dodge force (cm/s) | `900` / `200` |
 | `StaminaCost` | stamina per dodge | `20` |

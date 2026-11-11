@@ -1,4 +1,4 @@
--- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v2.3
+-- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v2.4
 -- All key-binding lives in DodgeSignal.ps1 (ships with the mod, started
 -- automatically below): it watches the configured keys at the OS level and
 -- writes press counters to dodge_signals.txt. This script only EXECUTES the
@@ -70,7 +70,7 @@ local BACK_SPEED      = 900.0
 local BACK_UP         = 200.0
 local STAMINA_COST    = 20.0
 local REQUIRE_STAMINA = true
-local DOUBLE_TAP_WINDOW = 0.25
+local DOUBLE_TAP_WINDOW = 0.13
 local COOLDOWN          = 0.60
 
 local function Trim(s)
@@ -334,7 +334,6 @@ end
 local signalLast = {}
 local lastNotice = 0.0
 local lastRespawn = 0.0
-local signalReads = 0
 
 -- Read one state line from the pipe. The listener serves one connection per
 -- poll (write + disconnect), so a connect can race the re-listen window; a
@@ -397,7 +396,6 @@ local function SignalStep()
         return
     end
     lastNotice = 0.0
-    signalReads = signalReads + 1
 
     -- the listener sends all counters on one line ("btn=N dtl=N dtr=N dtb=N"),
     -- so split on whitespace and parse each token
@@ -441,16 +439,16 @@ LoopAsync(50, function()
 end)
 
 -- ================= auto-start the signal listener =================
--- (os.execute verified available; the listener is mutex-guarded, so double
--- spawns are harmless, and it auto-exits when the game closes)
+-- (started windowless via LaunchListener.vbs; the listener is mutex-guarded,
+-- so double spawns are harmless, and it exits with the game)
 SpawnListener()
 DevLog("signal listener auto-started")
 
-print(string.format("[Configurable Dodge Mod] v2.3 loaded - mode: %s (%s), stamina cost %.0f",
+print(string.format("[Configurable Dodge Mod] v2.4 loaded - mode: %s (%s), stamina cost %.0f",
     MODALITY,
     MODALITY == "button" and ("dodge button " .. KEY_DODGE_BTN) or ("double-tap " .. DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK),
     STAMINA_COST))
-DevLog(string.format("boot v2.3 gen=%d mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
+DevLog(string.format("boot v2.4 gen=%d mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
 
 -- ================= ini live reload (always on) =================
 -- the listener re-reads the ini every ~2 s for key detection; this keeps the
@@ -480,7 +478,6 @@ end
 
 -- ================= hot reload (dev only, .hotreload gated) =================
 DodgeMod_BootComplete = DODGE_MOD_GEN
-DodgeMod_Handlers = function() end  -- legacy: re-pointed so old watchers see a handover
 -- watches main.lua only; the ini has its own always-on watcher above
 if devEnabled and devDir ~= nil then
     local sep = (string.find(devDir, "\\", 1, true) ~= nil) and "\\" or "/"
@@ -499,7 +496,6 @@ if devEnabled and devDir ~= nil then
         WatchMain = newMain
         DevLog("hot reload: main.lua changed")
         DodgeMod_Generation = DODGE_MOD_GEN + 1
-        local oldHandlers = DodgeMod_Handlers
         local okR, errR = pcall(dofile, selfPath)
         if not okR or DodgeMod_BootComplete ~= DodgeMod_Generation then
             if not okR then DevLog("RELOAD ERROR: " .. tostring(errR)) else DevLog("RELOAD ERROR: chunk did not finish booting") end

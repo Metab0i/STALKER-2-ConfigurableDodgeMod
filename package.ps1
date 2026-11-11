@@ -2,7 +2,7 @@
 #   Configurable Dodge Mod_<ver>_mod-only.zip : just the script mod (requires the user to already have UE4SS)
 #   Configurable Dodge Mod_<ver>_full.zip     : the script mod + a complete UE4SS runtime (dwmapi.dll etc.)
 param(
-    [string]$Version = "2.3"
+    [string]$Version = "2.4"
 )
 
 $ErrorActionPreference = "Stop"
