@@ -22,7 +22,7 @@ Run [b]Setup.bat[/b] in the mod folder, or edit [b]ConfigurableDodgeMod.ini[/b].
 [*][size=3][color=#D4D4D8][b]Modality[/b] - [code]button[/code] (hold a movement key + press the dodge button) or [code]doubletap[/code] (double-tap keys). One is active.[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]ButtonKey[/b] - the dodge button. Any key works: letters, F-keys, arrows, modifiers (Left Alt / Ctrl / Shift) and mouse buttons. Default [b]Left Alt[/b].[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]DoubleTapLeft / Right / Back[/b] - double-tap keys. Default [b]Z / C / S[/b].[/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]DoubleTapWindow[/b] - max seconds between taps. Default [b]0.13[/b].[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]DoubleTapWindow[/b] - max seconds between taps. Default [b]0.16[/b].[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]SideHorizontal / SideVertical[/b] - side dodge force (cm/s). Default [b]650 / 500[/b].[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]BackHorizontal / BackVertical[/b] - back dodge force (cm/s). Default [b]900 / 200[/b].[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]StaminaCost[/b] - stamina per dodge. Default [b]20[/b] (vanilla jump).[/color][/size][/*]
