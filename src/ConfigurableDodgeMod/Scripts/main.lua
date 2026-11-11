@@ -1,9 +1,8 @@
 -- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v2.4
--- All key-binding lives in DodgeSignal.ps1 (ships with the mod, started
--- automatically below): it watches the configured keys at the OS level and
--- writes press counters to dodge_signals.txt. This script only EXECUTES the
--- dodge: it polls the counters, reads the movement input for direction, and
--- launches the character. Config: ConfigurableDodgeMod.ini (live-reloaded).
+-- PROTOTYPE BRANCH (experiment/native-input): input is read through the
+-- engine's own key state (PlayerController:IsInputKeyDown) with edge
+-- detection and double-tap timing in Lua. No PowerShell listener, no pipe.
+-- Config: ConfigurableDodgeMod.ini (live-reloaded).
 
 local UEHelpers = require("UEHelpers")
 
@@ -125,10 +124,6 @@ if cfgPath ~= nil then
     end)
 end
 if iniContent ~= nil then ApplyConfig(iniContent) end
-
--- signal channel (written by DodgeSignal.ps1, read below) - named pipe,
--- kernel memory: nothing touches the disk
-local signalPath = "\\\\.\\pipe\\DodgeModSignal"
 
 -- ================= dodge logic =================
 -- cached player controller: UEHelpers.GetPlayerController() runs an uncached
@@ -327,128 +322,162 @@ local function HandleButtonPress()
     DevLog(string.format("press: dodge dir=%s handler=%.3f ms", d, (Now() - t0) * 1000))
 end
 
--- ================= signal file polling =================
--- DodgeSignal.ps1 maintains press counters for the configured keys:
---   btn=N (button modality)  dtl=N dtr=N dtb=N (double-tap modality)
--- A counter increase = a (double-)tap completed in the listener; we dodge.
-local signalLast = {}
-local lastNotice = 0.0
-local lastRespawn = 0.0
+-- ================= engine input (native prototype) =================
+-- Reads the configured keys through the game's own input system instead of the
+-- PowerShell listener: no external process, no pipe, no window hooks.
+-- Keys are resolved from the same ini values Setup writes (VK hex or names,
+-- including mouse buttons and modifiers).
 
--- Read one state line from the pipe. The listener serves one connection per
--- poll (write + disconnect), so a connect can race the re-listen window; a
--- second attempt in the same tick covers that.
-local function ReadSignalLine()
-    local content
-    -- NOTE: read("*l"), not read("*a") - the C runtime rejects the
-    -- "copy to EOF" read on Windows named pipes (EINVAL), while a single
-    -- line read works. The listener writes one line per connection.
-    pcall(function()
-        local h = io.open(signalPath, "r")
-        if h ~= nil then content = h:read("*l"); h:close() end
-    end)
-    if content == nil then
-        pcall(function()
-            local h = io.open(signalPath, "r")
-            if h ~= nil then content = h:read("*l"); h:close() end
-        end)
+local FKEY_BY_VK = {
+    [0x08] = "BackSpace", [0x09] = "Tab", [0x0D] = "Enter", [0x13] = "Pause", [0x14] = "CapsLock",
+    [0x1B] = "Escape", [0x20] = "SpaceBar", [0x21] = "PageUp", [0x22] = "PageDown", [0x23] = "End",
+    [0x24] = "Home", [0x25] = "Left", [0x26] = "Up", [0x27] = "Right", [0x28] = "Down",
+    [0x2D] = "Insert", [0x2E] = "Delete",
+    [0x5B] = "LeftWindows", [0x5C] = "RightWindows",
+    [0xA0] = "LeftShift", [0xA1] = "RightShift", [0xA2] = "LeftControl", [0xA3] = "RightControl",
+    [0xA4] = "LeftAlt", [0xA5] = "RightAlt",
+    [0xBA] = "Semicolon", [0xBB] = "Equals", [0xBC] = "Comma", [0xBD] = "Hyphen", [0xBE] = "Period",
+    [0xBF] = "Slash", [0xC0] = "Tilde", [0xDB] = "LeftBracket", [0xDC] = "Backslash",
+    [0xDD] = "RightBracket", [0xDE] = "Apostrophe", [0xE2] = "Backslash",
+    [0x01] = "LeftMouseButton", [0x02] = "RightMouseButton", [0x04] = "MiddleMouseButton",
+    [0x05] = "ThumbMouseButton", [0x06] = "ThumbMouseButton2",
+}
+local DIGIT_FKEY = { "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine" }
+for i = 0, 9 do FKEY_BY_VK[0x30 + i] = DIGIT_FKEY[i + 1] end
+for i = 1, 12 do FKEY_BY_VK[0x6F + i] = "F" .. i end
+for i = 0, 25 do FKEY_BY_VK[0x41 + i] = string.char(65 + i) end
+
+local NAME_ALIAS = {
+    ["Left Alt"] = "LeftAlt", ["Right Alt"] = "RightAlt",
+    ["Left Ctrl"] = "LeftControl", ["Right Ctrl"] = "RightControl",
+    ["Left Control"] = "LeftControl", ["Right Control"] = "RightControl",
+    ["Left Shift"] = "LeftShift", ["Right Shift"] = "RightShift",
+    ["Left Win"] = "LeftWindows", ["Right Win"] = "RightWindows",
+    ["Space"] = "SpaceBar", ["Backspace"] = "BackSpace",
+    [";"] = "Semicolon", ["="] = "Equals", [","] = "Comma", ["-"] = "Hyphen", ["."] = "Period",
+    ["/"] = "Slash", ["`"] = "Tilde", ["["] = "LeftBracket", ["\\"] = "Backslash",
+    ["]"] = "RightBracket", ["'"] = "Apostrophe",
+}
+
+local function ResolveFKeyName(raw)
+    if raw == nil then return nil end
+    local v = Trim(raw)
+    if v == "" then return nil end
+    local hex = string.match(v, "^0[xX](%x+)$")
+    if hex ~= nil then return FKEY_BY_VK[tonumber(hex, 16)] end
+    if NAME_ALIAS[v] ~= nil then return NAME_ALIAS[v] end
+    if v:match("^%d$") then return DIGIT_FKEY[tonumber(v) + 1] end
+    if v:match("^[%a][%w_]*$") then return v end
+    return nil
+end
+
+-- This UE4SS build exposes FName but not an FKey constructor, so an FKey
+-- instance is cloned from the player input's debug exec bindings and renamed.
+local function MakeFKey(name, index)
+    if name == nil then return nil end
+    local PC = GetPC()
+    if PC == nil then return nil end
+    local okPI, PI = pcall(function() return PC.PlayerInput end)
+    if not okPI or PI == nil then return nil end
+    local okB, binds = pcall(function() return PI.DebugExecBindings end)
+    if not okB or binds == nil then return nil end
+    local okK, key = pcall(function() return binds[index or 1].Key end)
+    if not okK or key == nil then return nil end
+    local okSet = pcall(function() key.KeyName = UEHelpers.FindOrAddFName(name) end)
+    if not okSet then return nil end
+    return key
+end
+
+local BtnName, DTName = nil, { left = nil, right = nil, back = nil }
+local BtnKey, DTKey = nil, { left = nil, right = nil, back = nil }
+local prevDown = {}
+local lastTap = { left = 0.0, right = 0.0, back = 0.0 }
+
+local function BuildKeys()
+    BtnName = ResolveFKeyName(KEY_DODGE_BTN)
+    DTName.left = ResolveFKeyName(DT_LEFT)
+    DTName.right = ResolveFKeyName(DT_RIGHT)
+    DTName.back = ResolveFKeyName(DT_BACK)
+    BtnKey = MakeFKey(BtnName, 1)
+    DTKey.left = MakeFKey(DTName.left, 2)
+    DTKey.right = MakeFKey(DTName.right, 3)
+    DTKey.back = MakeFKey(DTName.back, 4)
+    prevDown = {}
+    lastTap = { left = 0.0, right = 0.0, back = 0.0 }
+    DevLog(string.format("native input keys: btn=%s dt=%s/%s/%s structs=%s/%s/%s/%s",
+        tostring(BtnName), tostring(DTName.left), tostring(DTName.right), tostring(DTName.back),
+        tostring(BtnKey ~= nil), tostring(DTKey.left ~= nil), tostring(DTKey.right ~= nil), tostring(DTKey.back ~= nil)))
+    local function keyName(k)
+        if k == nil then return "nil" end
+        local ok, v = pcall(function() return k.KeyName:ToString() end)
+        if ok then return tostring(v) end
+        return tostring(k.KeyName)
     end
-    return content
+    DevLog("native key names: btn=" .. keyName(BtnKey) .. " dt=" .. keyName(DTKey.left) .. "/" .. keyName(DTKey.right) .. "/" .. keyName(DTKey.back))
 end
 
--- Start the key listener without any console window: wscript (a windowless
--- host) runs PowerShell hidden, so the listener cannot steal focus from the
--- game the way a `start /min powershell` console sometimes can.
-local function SpawnListener()
-    if os == nil or type(os.execute) ~= "function" or cfgPath == nil then return end
-    local launcher = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "LaunchListener.vbs")
-    pcall(function()
-        os.execute('wscript.exe //nologo //B "' .. launcher .. '"')
-    end)
+-- edge detection on the engine's own key state (frame independent)
+local lastPcWarn = 0.0
+local function KeyJustPressed(id, key)
+    if key == nil then return false end
+    local PC = GetPC()
+    if PC == nil then
+        if Now() - lastPcWarn > 10.0 then
+            lastPcWarn = Now()
+            DevLog("native input: no player controller")
+        end
+        return false
+    end
+    local ok, down = pcall(function() return PC:IsInputKeyDown(key) end)
+    if not ok then
+        if Now() - lastPcWarn > 10.0 then
+            lastPcWarn = Now()
+            DevLog("native input: IsInputKeyDown failed for " .. id)
+        end
+        down = false
+    end
+    local pressed = down and not prevDown[id]
+    prevDown[id] = down
+    if pressed then DevLog("engine key down: " .. id) end
+    return pressed
 end
 
-local function SignalStep()
-    if signalPath == nil then return end
-    local content = ReadSignalLine()
-    if content == nil then
-        -- listener not running (or starting up): after a grace period, show a
-        -- repeating on-screen notice (top-left, orange) AND respawn the
-        -- listener automatically - a crashed listener no longer disables the
-        -- mod until the next restart
-        if Now() > 15.0 and GetPC() ~= nil then
-            if Now() - lastNotice > 45.0 then
-                lastNotice = Now()
-                local msg = "Dodge keys are inactive: the key listener is not running - restarting it automatically."
-                print("[Configurable Dodge Mod] " .. msg)
-                pcall(function()
-                    local PC = GetPC()
-                    if PC ~= nil then
-                        UEHelpers.GetKismetSystemLibrary():PrintString(PC, msg, true, false, { R = 1.0, G = 0.6, B = 0.2, A = 1.0 }, 15.0)
-                    end
-                end)
-            end
-            if Now() - lastRespawn > 30.0 and os ~= nil and type(os.execute) == "function" and cfgPath ~= nil then
-                lastRespawn = Now()
-                SpawnListener()
-                DevLog("listener missing - respawn attempted")
-            end
+local function NativeStep()
+    if GetPC() == nil then return end
+    if MODALITY == "button" then
+        if KeyJustPressed("btn", BtnKey) then
+            HandleButtonPress()
         end
         return
     end
-    lastNotice = 0.0
-
-    -- the listener sends all counters on one line ("btn=N dtl=N dtr=N dtb=N"),
-    -- so split on whitespace and parse each token
-    for token in string.gmatch(content, "%S+") do
-        local k, v = string.match(token, "^(%w+)=(%d+)$")
-        if k ~= nil then
-            local n = tonumber(v)
-            local last = signalLast[k]
-            if last == nil then
-                signalLast[k] = n
-            elseif n < last then
-                -- the listener restarted and its counters reset: re-baseline
-                -- instead of ignoring every value until the old high is passed
-                signalLast[k] = n
-                DevLog("signal counters reset (" .. k .. ")")
-            elseif n > last then
-                signalLast[k] = n
-                if k == "btn" and MODALITY == "button" then
-                    HandleButtonPress()
-                elseif k == "dtl" and MODALITY == "doubletap" then
-                    DoDodge("left")
-                elseif k == "dtr" and MODALITY == "doubletap" then
-                    DoDodge("right")
-                elseif k == "dtb" and MODALITY == "doubletap" then
-                    DoDodge("back")
-                end
+    for _, d in ipairs({ "left", "right", "back" }) do
+        if KeyJustPressed("dt" .. d, DTKey[d]) then
+            local t = Now()
+            if lastTap[d] > 0.0 and (t - lastTap[d]) <= DOUBLE_TAP_WINDOW then
+                lastTap[d] = 0.0
+                DoDodge(d)
+            else
+                lastTap[d] = t
             end
         end
     end
 end
 
--- IMPORTANT: the whole step is pcall'd every tick. An uncaught error inside a
--- LoopAsync callback stops that loop permanently (this silently disabled
--- dodging for a whole session before), so errors are logged and the loop
--- keeps running.
-LoopAsync(50, function()
+BuildKeys()
+
+LoopAsync(10, function()
     if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
-    local ok, err = pcall(SignalStep)
-    if not ok then DevLog("signal poll error: " .. tostring(err)) end
+    local ok, err = pcall(NativeStep)
+    if not ok then DevLog("native input error: " .. tostring(err)) end
     return false
 end)
 
--- ================= auto-start the signal listener =================
--- (started windowless via LaunchListener.vbs; the listener is mutex-guarded,
--- so double spawns are harmless, and it exits with the game)
-SpawnListener()
-DevLog("signal listener auto-started")
-
-print(string.format("[Configurable Dodge Mod] v2.4 loaded - mode: %s (%s), stamina cost %.0f",
+print("[Configurable Dodge Mod] input: engine polling (native prototype)")
+print(string.format("[Configurable Dodge Mod] v2.4 loaded - native input - mode: %s (%s), stamina cost %.0f",
     MODALITY,
     MODALITY == "button" and ("dodge button " .. KEY_DODGE_BTN) or ("double-tap " .. DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK),
     STAMINA_COST))
-DevLog(string.format("boot v2.4 gen=%d mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
+DevLog(string.format("boot v2.4 gen=%d input=native mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
 
 -- ================= ini live reload (always on) =================
 -- the listener re-reads the ini every ~2 s for key detection; this keeps the
@@ -466,6 +495,7 @@ if cfgPath ~= nil then
             if newIni ~= nil and newIni ~= iniContent then
                 iniContent = newIni
                 ApplyConfig(newIni)
+                BuildKeys()
                 DevLog("ini reloaded: mode=" .. MODALITY .. " btn=" .. KEY_DODGE_BTN)
                 print(string.format("[Configurable Dodge Mod] ini reloaded - mode %s, dodge button %s, stamina %.0f",
                     MODALITY, MODALITY == "button" and KEY_DODGE_BTN or (DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK), STAMINA_COST))
