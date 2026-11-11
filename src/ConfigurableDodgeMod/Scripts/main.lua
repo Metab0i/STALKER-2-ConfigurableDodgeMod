@@ -339,6 +339,8 @@ local FKEY_BY_VK = {
     [0xBA] = "Semicolon", [0xBB] = "Equals", [0xBC] = "Comma", [0xBD] = "Hyphen", [0xBE] = "Period",
     [0xBF] = "Slash", [0xC0] = "Tilde", [0xDB] = "LeftBracket", [0xDC] = "Backslash",
     [0xDD] = "RightBracket", [0xDE] = "Apostrophe", [0xE2] = "Backslash",
+    [0x6A] = "Multiply", [0x6B] = "Add", [0x6D] = "Subtract", [0x6E] = "Decimal", [0x6F] = "Divide",
+    [0x90] = "NumLock", [0x91] = "ScrollLock",
     [0x01] = "LeftMouseButton", [0x02] = "RightMouseButton", [0x04] = "MiddleMouseButton",
     [0x05] = "ThumbMouseButton", [0x06] = "ThumbMouseButton2",
 }
@@ -346,6 +348,8 @@ local DIGIT_FKEY = { "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seve
 for i = 0, 9 do FKEY_BY_VK[0x30 + i] = DIGIT_FKEY[i + 1] end
 for i = 1, 12 do FKEY_BY_VK[0x6F + i] = "F" .. i end
 for i = 0, 25 do FKEY_BY_VK[0x41 + i] = string.char(65 + i) end
+local NUMPAD_FKEY = { "NumPadZero", "NumPadOne", "NumPadTwo", "NumPadThree", "NumPadFour", "NumPadFive", "NumPadSix", "NumPadSeven", "NumPadEight", "NumPadNine" }
+for i = 0, 9 do FKEY_BY_VK[0x60 + i] = NUMPAD_FKEY[i + 1] end
 
 local NAME_ALIAS = {
     ["Left Alt"] = "LeftAlt", ["Right Alt"] = "RightAlt",
@@ -412,6 +416,13 @@ local function BuildKeys()
         local ok, v = pcall(function() return k.KeyName:ToString() end)
         if ok then return tostring(v) end
         return tostring(k.KeyName)
+    end
+    if MODALITY == "button" and BtnKey == nil then
+        DevLog("native input: ButtonKey cannot be resolved to an engine key: " .. tostring(KEY_DODGE_BTN))
+        print("[Configurable Dodge Mod] dodge button is not supported by engine input - pick another key (F13-F24 are not available)")
+    elseif MODALITY == "doubletap" and (DTKey.left == nil or DTKey.right == nil or DTKey.back == nil) then
+        DevLog("native input: a double-tap key cannot be resolved to an engine key")
+        print("[Configurable Dodge Mod] a double-tap key is not supported by engine input - pick another key (F13-F24 are not available)")
     end
     DevLog("native key names: btn=" .. keyName(BtnKey) .. " dt=" .. keyName(DTKey.left) .. "/" .. keyName(DTKey.right) .. "/" .. keyName(DTKey.back))
 end
