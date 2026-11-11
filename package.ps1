@@ -70,6 +70,9 @@ function New-Package($name, $includeRuntime) {
         Copy-Item -Recurse $ModSrc (Join-Path $stage "ConfigurableDodgeMod")
     }
 
+    # README is shipped as text only; screenshots stay on the mod page
+    Copy-Item (Join-Path $ProjectRoot "README.md") $stage
+
     $zipPath = Join-Path $Dist "$name.zip"
     if (Test-Path $zipPath) { Remove-Item $zipPath }
     [System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $zipPath)

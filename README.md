@@ -70,9 +70,9 @@ Run **`Setup.bat`** in the mod folder:
   free-dodge window, or press **3** to reset everything to defaults
 
 <p>
-<img src="media/setup-1-modality.png" width="32%">
-<img src="media/setup-2-key-capture.png" width="32%">
-<img src="media/setup-3-forces.png" width="32%">
+<img src="media/setup-1-modality.png" width="32%" alt="Setup: choose button or double-tap modality">
+<img src="media/setup-2-key-capture.png" width="32%" alt="Setup: press a key to bind it">
+<img src="media/setup-3-forces.png" width="32%" alt="Setup: dodge forces, stamina cost and energy drink options">
 </p>
 
 Or edit **`ConfigurableDodgeMod.ini`** directly:
