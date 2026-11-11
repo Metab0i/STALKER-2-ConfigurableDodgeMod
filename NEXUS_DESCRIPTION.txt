@@ -25,13 +25,14 @@ Run [b]Setup.bat[/b] in the mod folder, or edit [b]ConfigurableDodgeMod.ini[/b].
 [*][size=3][color=#D4D4D8][b]DoubleTapWindow[/b] - max seconds between taps. Default [b]0.155[/b].[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]SideHorizontal / SideVertical[/b] - side dodge force (cm/s). Default [b]650 / 500[/b].[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]BackHorizontal / BackVertical[/b] - back dodge force (cm/s). Default [b]900 / 200[/b].[/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]StaminaCost[/b] - stamina per dodge. Default [b]20[/b] (vanilla jump).[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]StaminaCost[/b] - stamina per dodge. Default [b]15[/b] (vanilla jump).[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]EnergyDrinkEffect / EnergyDrinkFreeSeconds[/b] - dodges are free for a moment after drinking an energy drink, matching the game's brief no-drain window. Enabled by default; window [b]4.5 s[/b].[/color][/size][/*]
 [/list]
 
 [size=3][color=#D4D4D8]
 [b]Setup.bat[/b] captures keys live - press the key to bind it. Option [b]3[/b] at the modality prompt resets all settings to defaults.
 
-Default controls: hold [b]A / D / S[/b] and press [b]Left Alt[/b]. Forward-only movement does not dodge; low stamina and open menus/dialogs block dodges.[/color][/size]
+Default controls: hold [b]A / D / S[/b] and press [b]Left Alt[/b]. Forward-only movement does not dodge; low stamina and open menus/dialogs block dodges. Right after an energy drink, dodges are free for a few seconds (the game's own no-drain window).[/color][/size]
 
 [size=4][b]Requirements[/b][/size]
 [list]

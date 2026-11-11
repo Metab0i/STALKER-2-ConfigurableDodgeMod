@@ -21,6 +21,15 @@ This works for any key the engine knows: letters, digits, F1-F12, arrows,
 numpad, modifiers (Left Alt / Ctrl / Shift) and mouse buttons. F13-F24 have
 no engine key and cannot be used.
 
+## Energy drink interaction
+
+Vanilla energy drinks briefly stop stamina drain after drinking. The mod
+notices the drink through the game's own energetic-overuse value - the stat
+system reads it, and the mod listens to that read (a sharp rise means a drink
+was just consumed; nothing is polled). Dodges during the same short window are
+free, matching the game's behaviour. Default window: 4.5 s.
+Set `EnergyDrinkEffect=0` to ignore it.
+
 ## Install
 
 ### Full package (UE4SS not installed)
@@ -45,8 +54,10 @@ Default controls: hold **A/D/S** and press **Left Alt** to dodge.
 - Hold a movement key and press the dodge button. A/D/S dodge left / right /
   back; forward-only movement does nothing.
 - In double-tap mode, double-tap the configured keys (Z / C / S by default).
-- 20 stamina per dodge (vanilla jump). Low stamina and open menus/dialogs block
+- 15 stamina per dodge (vanilla jump). Low stamina and open menus/dialogs block
   dodges.
+- Right after an energy drink, dodges are free for the same short window in
+  which the game itself stops stamina drain (see below).
 
 ## Configure
 
@@ -55,7 +66,8 @@ Run **`Setup.bat`** in the mod folder:
 - choose button or double-tap mode
 - press a key to bind it - any key works, including Left Alt/Ctrl/Shift and
   mouse buttons; it is stored as name plus hex (e.g. `0x58   ; X`)
-- set forces and stamina cost, or press **3** to reset everything to defaults
+- set forces and stamina cost, toggle the energy drink interaction and its
+  free-dodge window, or press **3** to reset everything to defaults
 
 <p>
 <img src="media/setup-1-modality.png" width="32%">
@@ -73,7 +85,10 @@ Or edit **`ConfigurableDodgeMod.ini`** directly:
 | `DoubleTapWindow` | max seconds between taps | `0.155` |
 | `SideHorizontal/SideVertical` | side dodge force (cm/s) | `650` / `500` |
 | `BackHorizontal/BackVertical` | back dodge force (cm/s) | `900` / `200` |
-| `StaminaCost` | stamina per dodge | `20` |
+| `StaminaCost` | stamina per dodge | `15` |
+| `EnergyDrinkEffect` | free dodges during the drink's no-drain window (`1` / `0`) | `1` |
+| `EnergyDrinkFreeSeconds` | length of that window (seconds) | `4.5` |
+| `EnergyDrinkOveruseJump` | overuse rise that registers a drink (advanced) | `50` |
 
 Changes apply live within ~2 seconds - no restart.
 

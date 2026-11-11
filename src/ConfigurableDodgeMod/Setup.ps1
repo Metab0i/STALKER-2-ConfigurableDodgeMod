@@ -197,7 +197,7 @@ Write-Host "           ThumbMouseButton (Mouse 4), ThumbMouseButton2 (Mouse 5)" 
 Write-Host ""
 
 # --- read existing values (defaults if missing) ---
-$cur = @{ Modality = "button"; ButtonKey = "Left Alt"; DoubleTapLeft = "Z"; DoubleTapRight = "C"; DoubleTapBack = "S"; SideHorizontal = "650"; SideVertical = "500"; BackHorizontal = "900"; BackVertical = "200"; StaminaCost = "20"; DoubleTapWindow = "0.155" }
+$cur = @{ Modality = "button"; ButtonKey = "Left Alt"; DoubleTapLeft = "Z"; DoubleTapRight = "C"; DoubleTapBack = "S"; SideHorizontal = "650"; SideVertical = "500"; BackHorizontal = "900"; BackVertical = "200"; StaminaCost = "15"; DoubleTapWindow = "0.155"; EnergyDrinkEffect = "1"; EnergyDrinkFreeSeconds = "4.5"; EnergyDrinkOveruseJump = "50" }
 if (Test-Path $ini) {
     foreach ($line in Get-Content $ini) {
         if ($line -match '^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$' -and $line -notmatch '^\s*;') {
@@ -231,7 +231,10 @@ while ($true) {
         $cur["SideVertical"] = "500"
         $cur["BackHorizontal"] = "900"
         $cur["BackVertical"] = "200"
-        $cur["StaminaCost"] = "20"
+        $cur["StaminaCost"] = "15"
+        $cur["EnergyDrinkEffect"] = "1"
+        $cur["EnergyDrinkFreeSeconds"] = "4.5"
+        $cur["EnergyDrinkOveruseJump"] = "50"
         $resetRequested = $true
         break
     }
@@ -260,6 +263,15 @@ if (-not $resetRequested) {
     $cur["BackHorizontal"] = Format-Number (Read-ValidNumber "Back dodge directional force" $cur["BackHorizontal"] 1 10000)
     $cur["BackVertical"]   = Format-Number (Read-ValidNumber "Back dodge vertical force"   $cur["BackVertical"]   0 10000)
     $cur["StaminaCost"]    = Format-Number (Read-ValidNumber "Stamina cost"                $cur["StaminaCost"]    0 1000)
+    Write-Host ""
+    Write-Host "Energy drink: the game blocks stamina drain briefly after drinking." -ForegroundColor Cyan
+    Write-Host "While that is active the mod makes dodges free (1 = on, 0 = off)." -ForegroundColor Cyan
+    $ed = Read-Host "  Energy drink interaction [$($cur['EnergyDrinkEffect'])]"
+    if ($ed.Trim() -eq "0") { $cur["EnergyDrinkEffect"] = "0" }
+    elseif ($ed.Trim() -eq "1") { $cur["EnergyDrinkEffect"] = "1" }
+    if ($cur["EnergyDrinkEffect"] -ne "0") {
+        $cur["EnergyDrinkFreeSeconds"] = Format-Number (Read-ValidNumber "Free dodge window after a drink (seconds)" $cur["EnergyDrinkFreeSeconds"] 0 10)
+    }
 } else {
     Write-Host ""
     Write-Host "Reset to defaults: button mode, Left Alt dodge button, Z/C/S double-tap keys, default forces." -ForegroundColor Green
@@ -294,6 +306,13 @@ $content = @(
     "BackHorizontal=$($cur['BackHorizontal'])",
     "BackVertical=$($cur['BackVertical'])",
     "StaminaCost=$($cur['StaminaCost'])",
+    "",
+    "; --- Energy drink interaction ---",
+    "; while the drink's no-drain window is active a dodge costs no stamina",
+    "EnergyDrinkEffect=$($cur['EnergyDrinkEffect'])",
+    "EnergyDrinkFreeSeconds=$($cur['EnergyDrinkFreeSeconds'])",
+    "; overuse-value jump that counts as drinking an energy drink (advanced)",
+    "EnergyDrinkOveruseJump=$($cur['EnergyDrinkOveruseJump'])",
     ""
 )
 [System.IO.File]::WriteAllLines($ini, $content)
