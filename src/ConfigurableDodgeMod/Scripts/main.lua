@@ -70,7 +70,7 @@ local BACK_SPEED      = 900.0
 local BACK_UP         = 200.0
 local STAMINA_COST    = 20.0
 local REQUIRE_STAMINA = true
-local DOUBLE_TAP_WINDOW = 0.18
+local DOUBLE_TAP_WINDOW = 0.168
 local COOLDOWN          = 0.60
 
 local function Trim(s)

@@ -197,7 +197,7 @@ Write-Host "           ThumbMouseButton (Mouse 4), ThumbMouseButton2 (Mouse 5)" 
 Write-Host ""
 
 # --- read existing values (defaults if missing) ---
-$cur = @{ Modality = "button"; ButtonKey = "Left Alt"; DoubleTapLeft = "Z"; DoubleTapRight = "C"; DoubleTapBack = "S"; SideHorizontal = "650"; SideVertical = "500"; BackHorizontal = "900"; BackVertical = "200"; StaminaCost = "20"; DoubleTapWindow = "0.18" }
+$cur = @{ Modality = "button"; ButtonKey = "Left Alt"; DoubleTapLeft = "Z"; DoubleTapRight = "C"; DoubleTapBack = "S"; SideHorizontal = "650"; SideVertical = "500"; BackHorizontal = "900"; BackVertical = "200"; StaminaCost = "20"; DoubleTapWindow = "0.168" }
 if (Test-Path $ini) {
     foreach ($line in Get-Content $ini) {
         if ($line -match '^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$' -and $line -notmatch '^\s*;') {
@@ -226,7 +226,7 @@ while ($true) {
         $cur["DoubleTapLeft"] = "Z"
         $cur["DoubleTapRight"] = "C"
         $cur["DoubleTapBack"] = "S"
-        $cur["DoubleTapWindow"] = "0.18"
+        $cur["DoubleTapWindow"] = "0.168"
         $cur["SideHorizontal"] = "650"
         $cur["SideVertical"] = "500"
         $cur["BackHorizontal"] = "900"
@@ -266,7 +266,7 @@ if (-not $resetRequested) {
 }
 
 $window = ConvertTo-Number $cur["DoubleTapWindow"]
-if ($window -eq $null -or $window -le 0 -or $window -gt 5) { $cur["DoubleTapWindow"] = "0.18" }
+if ($window -eq $null -or $window -le 0 -or $window -gt 5) { $cur["DoubleTapWindow"] = "0.168" }
 
 # --- write ---
 $content = @(
