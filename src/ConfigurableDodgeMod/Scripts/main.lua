@@ -1,4 +1,4 @@
--- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v2.2
+-- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v2.3
 -- All key-binding lives in DodgeSignal.ps1 (ships with the mod, started
 -- automatically below): it watches the configured keys at the OS level and
 -- writes press counters to dodge_signals.txt. This script only EXECUTES the
@@ -446,11 +446,11 @@ end)
 SpawnListener()
 DevLog("signal listener auto-started")
 
-print(string.format("[Configurable Dodge Mod] v2.2 loaded - mode: %s (%s), stamina cost %.0f",
+print(string.format("[Configurable Dodge Mod] v2.3 loaded - mode: %s (%s), stamina cost %.0f",
     MODALITY,
     MODALITY == "button" and ("dodge button " .. KEY_DODGE_BTN) or ("double-tap " .. DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK),
     STAMINA_COST))
-DevLog(string.format("boot v2.2 gen=%d mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
+DevLog(string.format("boot v2.3 gen=%d mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
 
 -- ================= ini live reload (always on) =================
 -- the listener re-reads the ini every ~2 s for key detection; this keeps the
