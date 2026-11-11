@@ -357,6 +357,17 @@ local function ReadSignalLine()
     return content
 end
 
+-- Start the key listener without any console window: wscript (a windowless
+-- host) runs PowerShell hidden, so the listener cannot steal focus from the
+-- game the way a `start /min powershell` console sometimes can.
+local function SpawnListener()
+    if os == nil or type(os.execute) ~= "function" or cfgPath == nil then return end
+    local launcher = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "LaunchListener.vbs")
+    pcall(function()
+        os.execute('wscript.exe //nologo //B "' .. launcher .. '"')
+    end)
+end
+
 local function SignalStep()
     if signalPath == nil then return end
     local content = ReadSignalLine()
@@ -379,10 +390,7 @@ local function SignalStep()
             end
             if Now() - lastRespawn > 30.0 and os ~= nil and type(os.execute) == "function" and cfgPath ~= nil then
                 lastRespawn = Now()
-                local listenerPath = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "DodgeSignal.ps1")
-                pcall(function()
-                    os.execute('start "" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. listenerPath .. '"')
-                end)
+                SpawnListener()
                 DevLog("listener missing - respawn attempted")
             end
         end
@@ -435,13 +443,8 @@ end)
 -- ================= auto-start the signal listener =================
 -- (os.execute verified available; the listener is mutex-guarded, so double
 -- spawns are harmless, and it auto-exits when the game closes)
-if os ~= nil and type(os.execute) == "function" and cfgPath ~= nil then
-    local listenerPath = string.gsub(cfgPath, "ConfigurableDodgeMod%.ini$", "DodgeSignal.ps1")
-    pcall(function()
-        os.execute('start "" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. listenerPath .. '"')
-    end)
-    DevLog("signal listener auto-started")
-end
+SpawnListener()
+DevLog("signal listener auto-started")
 
 print(string.format("[Configurable Dodge Mod] v2.2 loaded - mode: %s (%s), stamina cost %.0f",
     MODALITY,

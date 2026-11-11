@@ -15,8 +15,9 @@ camera. Each dodge costs stamina. Every key and force value is configurable.
 UE4SS keybindings never see Windows system keys (Alt/Ctrl/Shift) and are
 unreliable after loading a world, so the mod uses its own input path:
 
-1. At game start the mod launches `DodgeSignal.ps1`, a small PowerShell
-   listener (mutex-guarded, exits with the game).
+1. At game start the mod launches `DodgeSignal.ps1` through a windowless
+   `wscript` launcher - no console window exists, so it cannot steal focus
+   (mutex-guarded, exits with the game).
 2. The listener reads the configured keys at the OS level
    (`GetAsyncKeyState`) and times the double-taps.
 3. It streams press counters to the mod through a named pipe - kernel memory,

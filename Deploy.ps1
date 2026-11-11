@@ -91,7 +91,7 @@ if (-not (Test-Path (Join-Path $Target "Scripts\main.lua"))) {
 }
 
 Copy-Item (Join-Path $src "Scripts\main.lua") (Join-Path $Target "Scripts\main.lua") -Force
-foreach ($f in @("DodgeSignal.ps1", "Setup.ps1", "Setup.bat")) {
+foreach ($f in @("DodgeSignal.ps1", "Setup.ps1", "Setup.bat", "LaunchListener.vbs")) {
     Copy-Item (Join-Path $src $f) (Join-Path $Target $f) -Force
 }
 if ($Ini) {
