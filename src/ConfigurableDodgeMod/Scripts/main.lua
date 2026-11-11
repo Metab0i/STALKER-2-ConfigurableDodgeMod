@@ -1,4 +1,4 @@
--- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v2.4
+-- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v3.0
 -- PROTOTYPE BRANCH (experiment/native-input): input is read through the
 -- engine's own key state (PlayerController:IsInputKeyDown) with edge
 -- detection and double-tap timing in Lua. No PowerShell listener, no pipe.
@@ -484,11 +484,11 @@ LoopAsync(10, function()
 end)
 
 print("[Configurable Dodge Mod] input: engine polling (native prototype)")
-print(string.format("[Configurable Dodge Mod] v2.4 loaded - native input - mode: %s (%s), stamina cost %.0f",
+print(string.format("[Configurable Dodge Mod] v3.0 loaded - native input - mode: %s (%s), stamina cost %.0f",
     MODALITY,
     MODALITY == "button" and ("dodge button " .. KEY_DODGE_BTN) or ("double-tap " .. DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK),
     STAMINA_COST))
-DevLog(string.format("boot v2.4 gen=%d input=native mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
+DevLog(string.format("boot v3.0 gen=%d input=native mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
 
 -- ================= ini live reload (always on) =================
 -- the listener re-reads the ini every ~2 s for key detection; this keeps the

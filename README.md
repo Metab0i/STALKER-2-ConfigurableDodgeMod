@@ -10,23 +10,16 @@ camera. Each dodge costs stamina. Every key and force value is configurable.
 
 [![Dodging demo video](https://img.youtube.com/vi/aLGJFVEcolc/0.jpg)](https://www.youtube.com/watch?v=aLGJFVEcolc)
 
-## How button capture works
+## How key detection works
 
-UE4SS keybindings never see Windows system keys (Alt/Ctrl/Shift) and are
-unreliable after loading a world, so the mod uses its own input path:
+The mod reads the configured keys directly from the game's own input system
+(`PlayerController:IsInputKeyDown`), about every 10 ms. Presses are
+edge-detected and the double-tap timing runs in Lua. Nothing external runs:
+no helper process, no console window, no named pipe.
 
-1. At game start the mod launches `DodgeSignal.ps1` through a windowless
-   `wscript` launcher - no console window exists, so it cannot steal focus
-   (mutex-guarded, exits with the game).
-2. The listener reads the configured keys at the OS level
-   (`GetAsyncKeyState`) and times the double-taps.
-3. It streams press counters to the mod through a named pipe - kernel memory,
-   nothing is written to disk.
-4. The Lua side reads the pipe and performs the dodge. If the listener stops,
-   the mod restarts it automatically.
-
-Because capture happens at the OS level, keyboard keys, modifiers
-(Left Alt / Ctrl / Shift) and mouse buttons all behave identically.
+This works for any key the engine knows: letters, digits, F1-F12, arrows,
+numpad, modifiers (Left Alt / Ctrl / Shift) and mouse buttons. F13-F24 have
+no engine key and cannot be used.
 
 ## Install
 
