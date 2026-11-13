@@ -4,7 +4,8 @@
 
 Hold a movement key and press your dodge button (default **Left Alt**), or
 double-tap your dodge keys, and Skif dodges left / right / back relative to the
-camera. Each dodge costs stamina. Every key and force value is configurable.
+camera. Each dodge costs stamina. Every key and force value is configurable by
+editing a single ini file, live.
 
 ## Demo
 
@@ -54,43 +55,57 @@ Default controls: hold **A/D/S** and press **Left Alt** to dodge.
 - Hold a movement key and press the dodge button. A/D/S dodge left / right /
   back; forward-only movement does nothing.
 - In double-tap mode, double-tap the configured keys (Z / C / S by default).
-- 15 stamina per dodge (vanilla jump). Low stamina and open menus/dialogs block
-  dodges.
+- 15 stamina per dodge. Low stamina and open menus/dialogs block dodges.
 - Right after an energy drink, dodges are free for the same short window in
-  which the game itself stops stamina drain (see below).
+  which the game itself stops stamina drain.
 
 ## Configure
 
-Run **`Setup.bat`** in the mod folder:
-
-- choose button or double-tap mode
-- press a key to bind it - any key works, including Left Alt/Ctrl/Shift and
-  mouse buttons; it is stored as name plus hex (e.g. `0x58   ; X`)
-- set forces and stamina cost, toggle the energy drink interaction and its
-  free-dodge window, or press **3** to reset everything to defaults
-
-<p>
-<img src="media/setup-1-modality.png" width="32%" alt="Setup: choose button or double-tap modality">
-<img src="media/setup-2-key-capture.png" width="32%" alt="Setup: press a key to bind it">
-<img src="media/setup-3-forces.png" width="32%" alt="Setup: dodge forces, stamina cost and energy drink options">
-</p>
-
-Or edit **`ConfigurableDodgeMod.ini`** directly:
+Edit **`ConfigurableDodgeMod.ini`** in the mod folder and save - changes apply
+in game within ~2 seconds. No setup tool, no restart.
 
 | Key | Meaning | Default |
 | --- | --- | --- |
-| `Modality` | `button` or `doubletap` | `button` |
-| `ButtonKey` | dodge button (name, VK hex or mouse button) | `Left Alt` |
+| `Modality` | `button` (hold a movement key + press `ButtonKey`) or `doubletap` | `button` |
+| `ButtonKey` | dodge button (key name, VK hex or mouse button) | `Left Alt` |
 | `DoubleTapLeft/Right/Back` | double-tap keys | `Z` / `C` / `S` |
-| `DoubleTapWindow` | max seconds between taps | `0.155` |
+| `DoubleTapWindow` | max seconds between taps (try 0.12-0.20) | `0.155` |
 | `SideHorizontal/SideVertical` | side dodge force (cm/s) | `650` / `500` |
 | `BackHorizontal/BackVertical` | back dodge force (cm/s) | `900` / `200` |
-| `StaminaCost` | stamina per dodge | `15` |
+| `StaminaCost` | stamina per dodge (`0` = free) | `15` |
 | `EnergyDrinkEffect` | free dodges during the drink's no-drain window (`1` / `0`) | `1` |
 | `EnergyDrinkFreeSeconds` | length of that window (seconds) | `4.5` |
-| `EnergyDrinkOveruseJump` | overuse rise that registers a drink (advanced) | `50` |
+| `EnergyDrinkOveruseJump` | advanced; leave at `50` | `50` |
 
-Changes apply live within ~2 seconds - no restart.
+## Bindable keys
+
+`ButtonKey` and `DoubleTapLeft/Right/Back` accept an engine key name, a VK hex
+code (`0x58`) or a mouse button. Names are case-sensitive.
+
+| Group | Names |
+| --- | --- |
+| Letters | `A` - `Z` |
+| Digits | `0` - `9` (or `Zero` - `Nine`) |
+| Function | `F1` - `F12` (F13-F24 do not exist in the engine) |
+| Arrows | `Left` `Up` `Right` `Down` |
+| Edit | `Home` `End` `PageUp` `PageDown` `Insert` `Delete` `BackSpace` |
+| Misc | `Tab` `Enter` `Escape` `SpaceBar` `Pause` `CapsLock` `NumLock` `ScrollLock` |
+| Modifiers | `LeftShift` `RightShift` `LeftControl` `RightControl` `LeftAlt` `RightAlt` `LeftWindows` `RightWindows` |
+| Symbols | `Semicolon` `Equals` `Comma` `Hyphen` `Period` `Slash` `Tilde` `LeftBracket` `Backslash` `RightBracket` `Apostrophe` |
+| Numpad | `NumPadZero` - `NumPadNine` `Multiply` `Add` `Subtract` `Decimal` `Divide` |
+| Mouse | `LeftMouseButton` `RightMouseButton` `MiddleMouseButton` `ThumbMouseButton` (Mouse 4) `ThumbMouseButton2` (Mouse 5) |
+
+Aliases: `Left Alt`, `Right Ctrl`, `Left Shift`, `Space`, `Backspace`,
+`Left Win`, and the literal symbol keys `;` `=` `,` `-` `.` `/` `[` `]` `\` `'`.
+
+Examples:
+
+```ini
+ButtonKey=Left Alt
+ButtonKey=ThumbMouseButton2
+ButtonKey=0x58
+DoubleTapLeft=Q
+```
 
 ## Requirements
 
