@@ -1,7 +1,7 @@
--- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v3.2
--- PROTOTYPE BRANCH (experiment/native-input): input is read through the
--- engine's own key state (PlayerController:IsInputKeyDown) with edge
--- detection and double-tap timing in Lua. No PowerShell listener, no pipe.
+-- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v3.3
+-- Input: UE4SS keybinds call the dodge directly; modifier-only keys (Alt/
+-- Ctrl/Shift) fall back to a light engine key-state check. No listener,
+-- no pipe, no hooks.
 -- Config: ConfigurableDodgeMod.ini (live-reloaded).
 
 local UEHelpers = require("UEHelpers")
@@ -135,7 +135,6 @@ if iniContent ~= nil then ApplyConfig(iniContent) end
 -- cached player controller: UEHelpers.GetPlayerController() runs an uncached
 -- object-array scan (~25-30 ms) - calling it per press was the stutter
 local pcCache = nil
-local nextPcScanAt = 0.0
 local function GetPC()
     if pcCache ~= nil then
         local ok, valid = pcall(function() return pcCache:IsValid() end)
@@ -155,12 +154,6 @@ local lastStaminaMsg = 0.0
 local energyFreeUntil = 0.0
 local lastOveruse = nil
 local lastOveruseAt = 0.0
-local energyHookInstalled = false
-local energyNextTryAt = 0.0
-local hookRetryDelay = 2.0
-local hookFailLogged = false
-local energyPending = nil
-local energyPendingAt = 0.0
 local lastPawnKey = nil
 local keysRetryAt = 0.0
 local keysWarnAt = 0.0
@@ -193,17 +186,18 @@ end
 -- Single place that consumes an overuse sample (from the hook or an on-demand
 -- read). A sharp rise means a drink was just consumed; a changed pawn resets
 -- the baseline so loading a save can never look like a drink.
-local function ObserveOveruse(v, t, key)
+local function ObserveOveruse(v, t, key, recent)
     if v == nil then return end
     if key ~= nil and key ~= lastPawnKey then
         lastPawnKey = key
         lastOveruse = nil
     end
-    lastOveruseAt = t
-    if lastOveruse ~= nil and (v - lastOveruse) >= ENERGY_DRINK_JUMP then
+    -- only a jump between two recent samples counts as a drink
+    if recent and lastOveruse ~= nil and (v - lastOveruse) >= ENERGY_DRINK_JUMP then
         energyFreeUntil = t + ENERGY_DRINK_FREE_SECONDS
         DevLog(string.format("energy drink detected (overuse %.1f -> %.1f): dodges free for %.2fs", lastOveruse, v, ENERGY_DRINK_FREE_SECONDS))
     end
+    lastOveruseAt = t
     lastOveruse = v
 end
 
@@ -212,12 +206,14 @@ local function RefreshOveruse(Pawn)
     if not ok then return end
     local v = ParamNumber(ou)
     if v == nil then return end
-    ObserveOveruse(v, Now(), PawnKey(Pawn))
+    local t = Now()
+    local recent = lastOveruse ~= nil and (t - lastOveruseAt) <= 5.0
+    ObserveOveruse(v, t, PawnKey(Pawn), recent)
 end
 
 local function SpendStamina(Pawn)
     if STAMINA_COST <= 0.0 then return true end
-    if ENERGY_DRINK_ENABLED and (not energyHookInstalled or (Now() - lastOveruseAt) > 3.0) then
+    if ENERGY_DRINK_ENABLED then
         RefreshOveruse(Pawn)
     end
     if ENERGY_DRINK_ENABLED and Now() < energyFreeUntil then
@@ -242,36 +238,6 @@ local function SpendStamina(Pawn)
     pcall(function() Pawn:ForceSetSP(newSP) end)
     DevLog(string.format("stamina %.1f -> %.1f", curSP, newSP))
     return true
-end
-
--- Energy drink: the game's stat system already reads GetEnergeticOveruseValue
--- (~2x/s), so hook that read instead of polling. The callback stays tiny: it
--- only stashes the value for the input loop, which does the comparison/logging.
-local function InstallEnergyDrinkHook()
-    if not ENERGY_DRINK_ENABLED or energyHookInstalled then return end
-    local ok, preId, postId = pcall(function()
-        return RegisterHook("/Script/Stalker2.Obj:GetEnergeticOveruseValue",
-            function(ctx) end,
-            function(ctx, ret)
-                if not ENERGY_DRINK_ENABLED then return end
-                local v = ParamNumber(ret)
-                if v == nil then return end
-                energyPending = v
-                energyPendingAt = os.clock()
-            end)
-    end)
-    if ok and postId ~= nil then
-        energyHookInstalled = true
-        hookFailLogged = false
-        DevLog("energy drink hook installed")
-    else
-        if not hookFailLogged then
-            hookFailLogged = true
-            DevLog("energy drink hook registration failed (retrying with backoff)")
-        end
-        hookRetryDelay = math.min(hookRetryDelay * 2.0, 60.0)
-        energyNextTryAt = Now() + hookRetryDelay
-    end
 end
 
 local function BuildLaunchVector(direction)
@@ -464,6 +430,42 @@ local NAME_ALIAS = {
     ["/"] = "Slash", ["`"] = "Tilde", ["["] = "LeftBracket", ["\\"] = "Backslash",
     ["]"] = "RightBracket", ["'"] = "Apostrophe",
 }
+-- engine key enum names used for keybind registration
+local KEYENUM_BY_NAME = {}
+do
+    local function add(n, kname)
+        local ok, v = pcall(function() return Key[kname] end)
+        if ok and v ~= nil then KEYENUM_BY_NAME[n] = v end
+    end
+    for c = string.byte("A"), string.byte("Z") do
+        local ch = string.char(c)
+        add(ch, ch)
+    end
+    local DIG = { "ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE" }
+    for i = 0, 9 do
+        add(tostring(i), DIG[i + 1])
+        add(DIG[i + 1], DIG[i + 1])
+    end
+    for i = 1, 12 do add("F" .. i, "F" .. i) end
+    add("Left", "LEFT_ARROW"); add("Up", "UP_ARROW"); add("Right", "RIGHT_ARROW"); add("Down", "DOWN_ARROW")
+    add("Home", "HOME"); add("End", "END"); add("PageUp", "PAGE_UP"); add("PageDown", "PAGE_DOWN")
+    add("Insert", "INS"); add("Delete", "DEL")
+    add("BackSpace", "BACKSPACE"); add("Tab", "TAB"); add("Enter", "RETURN"); add("Escape", "ESCAPE")
+    add("SpaceBar", "SPACE"); add("Pause", "PAUSE"); add("CapsLock", "CAPS_LOCK")
+    add("NumLock", "NUM_LOCK"); add("ScrollLock", "SCROLL_LOCK")
+    for i = 0, 9 do add("NumPad" .. DIG[i + 1], "NUM_" .. DIG[i + 1]) end
+    add("Multiply", "MULTIPLY"); add("Add", "ADD"); add("Subtract", "SUBTRACT")
+    add("Decimal", "DECIMAL"); add("Divide", "DIVIDE")
+    add("Semicolon", "OEM_ONE"); add("Equals", "OEM_PLUS"); add("Comma", "OEM_COMMA")
+    add("Hyphen", "OEM_MINUS"); add("Period", "OEM_PERIOD"); add("Slash", "OEM_TWO")
+    add("Tilde", "OEM_THREE"); add("LeftBracket", "OEM_FOUR"); add("Backslash", "OEM_FIVE")
+    add("RightBracket", "OEM_SIX"); add("Apostrophe", "OEM_SEVEN")
+    add("LeftMouseButton", "LEFT_MOUSE_BUTTON"); add("RightMouseButton", "RIGHT_MOUSE_BUTTON")
+    add("MiddleMouseButton", "MIDDLE_MOUSE_BUTTON"); add("ThumbMouseButton", "XBUTTON_ONE")
+    add("ThumbMouseButton2", "XBUTTON_TWO")
+end
+local KEYMAP_COUNT = 0
+for _ in pairs(KEYENUM_BY_NAME) do KEYMAP_COUNT = KEYMAP_COUNT + 1 end
 
 local function ResolveFKeyName(raw)
     if raw == nil then return nil end
@@ -554,79 +556,114 @@ local function KeyJustPressed(id, key)
     return pressed
 end
 
-local function NativeStep()
-    -- UEHelpers.GetPlayerController is an uncached object-array scan. Never run
-    -- it at 100 Hz while there is no controller (level loads): back off to 2 Hz.
-    if pcCache == nil and Now() < nextPcScanAt then return end
-    local PC = GetPC()
-    if PC == nil then
-        nextPcScanAt = Now() + 0.5
-        return
-    end
-    local Pawn = PC.Pawn
-    -- Never touch game input without a live pawn. During level loads/menu the
-    -- controller exists but its input state is being torn down, and
-    -- IsInputKeyDown can fault inside the game (AV seen at load time).
-    if Pawn == nil or not Pawn:IsValid() then return end
-    if ENERGY_DRINK_ENABLED and not energyHookInstalled and Now() >= energyNextTryAt then
-        InstallEnergyDrinkHook()
-    end
-    if energyPending ~= nil then
-        local v, t = energyPending, energyPendingAt
-        energyPending = nil
-        ObserveOveruse(v, t, PawnKey(Pawn))
-    end
-    if KeysMissing() and Now() >= keysRetryAt then
-        keysRetryAt = Now() + 1.0
-        BuildKeys(true)
-        if not KeysMissing() then
-            DevLog("native input: keys resolved after world load")
-            keysWarnAt = 0.0
-        elseif keysWarnAt == 0.0 then
-            keysWarnAt = Now() + 8.0
-        elseif Now() >= keysWarnAt then
-            keysWarnAt = Now() + 60.0
-            if MODALITY == "button" then
-                print("[Configurable Dodge Mod] dodge button is not supported by engine input - pick another key (F13-F24 are not available)")
-            else
-                print("[Configurable Dodge Mod] a double-tap key is not supported by engine input - pick another key (F13-F24 are not available)")
-            end
-        end
-    end
-    if MODALITY == "button" then
-        if KeyJustPressed("btn", BtnKey) then
-            HandleButtonPress()
-        end
-        return
-    end
-    for _, d in ipairs({ "left", "right", "back" }) do
-        if KeyJustPressed("dt" .. d, DTKey[d]) then
-            local t = Now()
-            if lastTap[d] > 0.0 and (t - lastTap[d]) <= DOUBLE_TAP_WINDOW then
-                lastTap[d] = 0.0
-                DoDodge(d)
-            else
-                lastTap[d] = t
-            end
-        end
+ExecuteInGameThread(function() pcall(BuildKeys) end)
+
+-- ---------------- input: keybind events ----------------
+local function TapKey(d)
+    local t = Now()
+    if lastTap[d] > 0.0 and (t - lastTap[d]) <= DOUBLE_TAP_WINDOW then
+        lastTap[d] = 0.0
+        DoDodge(d)
+    else
+        lastTap[d] = t
     end
 end
 
-BuildKeys()
+DodgeMod_KeyActions = {}
 
-LoopAsync(10, function()
+local function RegisterInputKey(ke)
+    if ke == nil then return end
+    local okReg, isReg = pcall(function() return IsKeyBindRegistered(ke, {}) end)
+    if okReg and isReg then return end
+    local ok, err = pcall(function()
+        RegisterKeyBindAsync(ke, {}, function()
+            local act = DodgeMod_KeyActions[ke]
+            if act == nil then return end
+            ExecuteInGameThread(function()
+                local ok2, err2 = pcall(act)
+                if not ok2 then DevLog("keybind action error: " .. tostring(err2)) end
+            end)
+        end)
+    end)
+    DevLog("keybind registered key=" .. tostring(ke) .. " ok=" .. tostring(ok) .. " " .. tostring(err or ""))
+end
+
+local function EnsureInputBinds()
+    local desired = {}
+    DodgeMod_FallbackButton = false
+    DodgeMod_FallbackDT = { left = false, right = false, back = false }
+    if MODALITY == "button" then
+        local ke = nil
+        if BtnName ~= nil then ke = KEYENUM_BY_NAME[BtnName] end
+        if ke ~= nil then desired[ke] = HandleButtonPress else DodgeMod_FallbackButton = true end
+    else
+        for _, d in ipairs({ "left", "right", "back" }) do
+            local nm = DTName[d]
+            local ke = nil
+            if nm ~= nil then ke = KEYENUM_BY_NAME[nm] end
+            if ke ~= nil then desired[ke] = function() TapKey(d) end
+            else DodgeMod_FallbackDT[d] = true end
+        end
+    end
+    DodgeMod_KeyActions = desired
+    for ke in pairs(desired) do RegisterInputKey(ke) end
+    DodgeMod_FallbackNeeded = DodgeMod_FallbackButton or DodgeMod_FallbackDT.left or DodgeMod_FallbackDT.right or DodgeMod_FallbackDT.back
+end
+
+pcall(EnsureInputBinds)
+
+-- Modifier-only keys (Alt/Ctrl/Shift) have no Key enum entry: poll those only.
+local fallbackQueued = false
+LoopAsync(50, function()
     if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
-    local ok, err = pcall(NativeStep)
-    if not ok then DevLog("native input error: " .. tostring(err)) end
+    if not DodgeMod_FallbackNeeded then return false end
+    if fallbackQueued then return false end
+    fallbackQueued = true
+    ExecuteInGameThread(function()
+        fallbackQueued = false
+        pcall(function()
+            local PC = GetPC()
+            if PC == nil then return end
+            local pawn = PC.Pawn
+            if pawn == nil or not pawn:IsValid() then return end
+            if DodgeMod_FallbackButton and BtnKey ~= nil and KeyJustPressed("fb_btn", BtnKey) then
+                HandleButtonPress()
+            end
+            if MODALITY == "doubletap" then
+                for _, d in ipairs({ "left", "right", "back" }) do
+                    if DodgeMod_FallbackDT[d] and DTKey[d] ~= nil and KeyJustPressed("fb_dt" .. d, DTKey[d]) then
+                        TapKey(d)
+                    end
+                end
+            end
+        end)
+    end)
     return false
 end)
 
-print("[Configurable Dodge Mod] input: engine polling (native prototype)")
-print(string.format("[Configurable Dodge Mod] v3.2 loaded - native input - mode: %s (%s), stamina cost %.0f",
+-- 1 s maintenance: key resolution, energy baseline, keybind upkeep
+LoopAsync(1000, function()
+    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
+    ExecuteInGameThread(function()
+        pcall(function()
+            local PC = GetPC()
+            if PC == nil then return end
+            local pawn = PC.Pawn
+            if pawn ~= nil and pawn:IsValid() then
+                if KeysMissing() then BuildKeys(true) end
+                if ENERGY_DRINK_ENABLED then RefreshOveruse(pawn) end
+            end
+            EnsureInputBinds()
+        end)
+    end)
+    return false
+end)
+print("[Configurable Dodge Mod] input: keybind events (modifier fallback poll) keymap=" .. tostring(KEYMAP_COUNT))
+print(string.format("[Configurable Dodge Mod] v3.3 loaded - keybind input - mode: %s (%s), stamina cost %.0f",
     MODALITY,
     MODALITY == "button" and ("dodge button " .. KEY_DODGE_BTN) or ("double-tap " .. DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK),
     STAMINA_COST))
-DevLog(string.format("boot v3.2 gen=%d input=native mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
+DevLog(string.format("boot v3.3 gen=%d input=keybind mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
 
 -- ================= ini live reload (always on) =================
 -- the listener re-reads the ini every ~2 s for key detection; this keeps the
@@ -643,11 +680,16 @@ if cfgPath ~= nil then
             end)
             if newIni ~= nil and newIni ~= iniContent then
                 iniContent = newIni
-                ApplyConfig(newIni)
-                BuildKeys()
-                DevLog("ini reloaded: mode=" .. MODALITY .. " btn=" .. KEY_DODGE_BTN)
-                print(string.format("[Configurable Dodge Mod] ini reloaded - mode %s, dodge button %s, stamina %.0f",
-                    MODALITY, MODALITY == "button" and KEY_DODGE_BTN or (DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK), STAMINA_COST))
+                ExecuteInGameThread(function()
+                    local ok2, err2 = pcall(function()
+                        ApplyConfig(newIni)
+                        BuildKeys()
+                        DevLog("ini reloaded: mode=" .. MODALITY .. " btn=" .. KEY_DODGE_BTN)
+                        print(string.format("[Configurable Dodge Mod] ini reloaded - mode %s, dodge button %s, stamina %.0f",
+                            MODALITY, MODALITY == "button" and KEY_DODGE_BTN or (DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK), STAMINA_COST))
+                    end)
+                    if not ok2 then DevLog("ini apply error: " .. tostring(err2)) end
+                end)
             end
         end)
         if not ok then DevLog("ini watcher error: " .. tostring(err)) end

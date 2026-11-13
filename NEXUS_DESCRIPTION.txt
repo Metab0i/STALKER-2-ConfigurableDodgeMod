@@ -36,9 +36,8 @@ Default controls: hold [b]A / D / S[/b] and press [b]Left Alt[/b]. Forward-only 
 
 [size=4][b]Requirements[/b][/size]
 [list]
-[*][size=3][color=#D4D4D8]S.T.A.L.K.E.R. 2: Heart of Chornobyl, update [b]2.0 or newer[/b][/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]UE4SS[/b] - experimental build [b]v3.0.1-1028-gd7e7826d[/b][/color][/size][/*]
-[*][size=3][color=#D4D4D8][url=https://www.nexusmods.com/stalker2heartofchornobyl/mods/2341]RE-UE4SS Compatibility Fix for Update 2.0 (UE5.5) v1.2[/url] - included in the full package[/color][/size][/*]
+[*][size=3][color=#D4D4D8]S.T.A.L.K.E.R. 2: Heart of Chornobyl, update [b]2.1[/b][/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]UE4SS[/b] - the update 2.1 build ([url=https://www.nexusmods.com/stalker2heartofchornobyl/mods/3096]Nexus mod 3096[/url]) - included in the full package[/color][/size][/*]
 [/list]
 
 [size=4][b]Source[/b][/size][size=3][color=#D4D4D8]

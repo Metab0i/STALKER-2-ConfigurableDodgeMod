@@ -13,22 +13,23 @@ editing a single ini file, live.
 
 ## How key detection works
 
-The mod reads the configured keys directly from the game's own input system
-(`PlayerController:IsInputKeyDown`), about every 10 ms. Presses are
-edge-detected and the double-tap timing runs in Lua. Nothing external runs:
-no helper process, no console window, no named pipe.
+Dodges are driven by the game's own input events: the configured key is
+registered with UE4SS as a keybind, so a press calls the dodge directly (no
+polling loop). Modifier-only bindings (Left Alt / Ctrl / Shift) have no
+engine key-enum entry, so those fall back to a light 20 Hz check of the
+engine's key state. Nothing external runs: no helper process, no console
+window.
 
 This works for any key the engine knows: letters, digits, F1-F12, arrows,
-numpad, modifiers (Left Alt / Ctrl / Shift) and mouse buttons. F13-F24 have
-no engine key and cannot be used.
+numpad, mouse buttons, and modifiers via the fallback. F13-F24 have no
+engine key and cannot be used.
 
 ## Energy drink interaction
 
 Vanilla energy drinks briefly stop stamina drain after drinking. The mod
-notices the drink through the game's own energetic-overuse value - the stat
-system reads it, and the mod listens to that read (a sharp rise means a drink
-was just consumed; nothing is polled). Dodges during the same short window are
-free, matching the game's behaviour. Default window: 4.5 s.
+samples the game's energetic-overuse value once a second (and again on every
+dodge); a sharp rise means a drink was just consumed. Dodges during the same
+short window are free, matching the game's behaviour. Default window: 4.5 s.
 Set `EnergyDrinkEffect=0` to ignore it.
 
 ## Install
@@ -38,8 +39,8 @@ Set `EnergyDrinkEffect=0` to ignore it.
 1. Copy the contents of the zip into
    `Stalker2\Binaries\Win64\` - the folder containing
    `Stalker2-Win64-Shipping.exe`.
-2. Launch the game. Done - the package includes a UE4SS runtime with the
-   update 2.x compatibility fix.
+2. Launch the game. Done - the package includes the update 2.1 UE4SS build with
+   its Stalker2 signatures.
 
 ### Mod-only package (UE4SS already installed)
 
@@ -111,9 +112,8 @@ DoubleTapLeft=Q
 
 | Dependency | Version |
 | --- | --- |
-| S.T.A.L.K.E.R. 2: Heart of Chornobyl | update 2.0+ |
-| UE4SS | experimental `v3.0.1-1028-gd7e7826d` |
-| RE-UE4SS Compatibility Fix (Nexus 2341) | v1.2 - included in the `_full` package |
+| S.T.A.L.K.E.R. 2: Heart of Chornobyl | update 2.1 |
+| UE4SS | the update 2.1 build (Nexus mod 3096) - included in the `_full` package |
 
 ## Credits
 

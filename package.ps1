@@ -2,7 +2,7 @@
 #   Configurable Dodge Mod_<ver>_mod-only.zip : just the script mod (requires an existing UE4SS)
 #   Configurable Dodge Mod_<ver>_full.zip     : the script mod + a complete UE4SS runtime
 param(
-    [string]$Version = "3.2"
+    [string]$Version = "3.3"
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,24 +48,6 @@ function New-Package($name, $includeRuntime) {
             Set-Content -LiteralPath $modsTxt -Value $lines -Encoding UTF8
         }
 
-        # attribution files for the UE4SS compatibility fix (required by its terms)
-        $fixZip = Join-Path $GameDir "mod packs\STALKER2 UE4SS Update2.0.5 Compatibility Fix V1.2 2341 1.2 2026-09-13T07-37Z OxGWqGd2R.zip"
-        if (Test-Path $fixZip) {
-            $attrDir = Join-Path $stage "CompatibilityFix-Attribution"
-            New-Item -ItemType Directory -Path $attrDir -Force | Out-Null
-            $fx = [System.IO.Compression.ZipFile]::OpenRead($fixZip)
-            foreach ($e in $fx.Entries) {
-                if ($e.FullName -match '(^|/)(LICENSES_AND_ATTRIBUTION\.txt|SOURCE_AND_BUILD_INFO\.txt|CHANGELOG\.txt)$|^(patches|licenses)/[^/]+$') {
-                    $dest = Join-Path $attrDir ($e.FullName -replace '/', '\')
-                    $destParent = Split-Path -Parent $dest
-                    if (-not (Test-Path $destParent)) { New-Item -ItemType Directory -Path $destParent -Force | Out-Null }
-                    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $dest, $true)
-                }
-            }
-            $fx.Dispose()
-        } else {
-            Write-Warning "Compatibility-fix zip not found at $fixZip - attribution files NOT bundled."
-        }
     } else {
         Copy-Item -Recurse $ModSrc (Join-Path $stage "ConfigurableDodgeMod")
     }
