@@ -1,122 +1,111 @@
-# Configurable Dodge Mod for S.T.A.L.K.E.R. 2
+# Configurable Dodge Mod (native) v4.0.0
 
-![Configurable Dodge Mod thumbnail](media/main.png)
+Native dodge mod for **S.T.A.L.K.E.R. 2: Heart of Chornobyl 2.1.0** (build
+`a6b31ee`), packaged as a standard **UE4SS C++ mod**. No proxy DLL, no helper
+process, no changes outside the mod folder.
 
-Hold a movement key and press your dodge button (default **Left Alt**), or
-double-tap your dodge keys, and Skif dodges left / right / back relative to the
-camera. Each dodge costs stamina. Every key and force value is configurable by
-editing a single ini file, live.
+## Performance notes
 
-## Demo
-
-[![Dodging demo video](https://img.youtube.com/vi/aLGJFVEcolc/0.jpg)](https://www.youtube.com/watch?v=aLGJFVEcolc)
-
-## How key detection works
-
-Dodges are driven by the game's own input events: the configured key is
-registered with UE4SS as a keybind, so a press calls the dodge directly (no
-polling loop). Modifier-only bindings (Left Alt / Ctrl / Shift) have no
-engine key-enum entry, so those fall back to a light 20 Hz check of the
-engine's key state. Nothing external runs: no helper process, no console
-window.
-
-This works for any key the engine knows: letters, digits, F1-F12, arrows,
-numpad, mouse buttons, and modifiers via the fallback. F13-F24 have no
-engine key and cannot be used.
-
-## Energy drink interaction
-
-Vanilla energy drinks briefly stop stamina drain after drinking. The mod
-samples the game's energetic-overuse value once a second (and again on every
-dodge); a sharp rise means a drink was just consumed. Dodges during the same
-short window are free, matching the game's behaviour. Default window: 4.5 s.
-Set `EnergyDrinkEffect=0` to ignore it.
+- The controller scan walks `GUObjectArray` chunk-first: one chunk-pointer read
+  per 65 536 objects instead of one per object.
+- `Readable()` caches the last committed region, so consecutive objects skip the
+  `VirtualQuery`; the cache is dropped at the start of every tick, because the
+  game frees and recomits memory between frames.
+- Control rotation is validated before stamina is spent, so an aborted dodge
+  costs nothing.
 
 ## Install
 
-### Full package (UE4SS not installed)
+1. UE4SS for 2.1 must already be installed in `Stalker2\Binaries\Win64`.
+2. Copy `dist\ConfigurableDodgeNative\` into `Stalker2\Binaries\Win64\ue4ss\Mods\`.
+3. Add `ConfigurableDodgeNative : 1` to `ue4ss\Mods\mods.txt`.
+4. The mod folder contains an empty `enabled.txt`; this UE4SS 3.0.1 build keys
+   per-mod enablement off that file (`mods.json` is not required).
+5. Start the game.
 
-1. Copy the contents of the zip into
-   `Stalker2\Binaries\Win64\` - the folder containing
-   `Stalker2-Win64-Shipping.exe`.
-2. Launch the game. Done - the package includes the update 2.1 UE4SS build with
-   its Stalker2 signatures.
+Config edits are picked up about a second after the file changes, while the game
+window has focus (the mod only ticks while the game is foreground).
 
-### Mod-only package (UE4SS already installed)
+Installing by hand is the whole procedure; nothing else is written outside the
+mod folder.
 
-1. Copy the `ConfigurableDodgeMod` folder into
-   `Stalker2\Binaries\Win64\ue4ss\Mods\`.
-2. Add `ConfigurableDodgeMod : 1` to `ue4ss\Mods\mods.txt`.
-3. Launch the game.
-
-Default controls: hold **A/D/S** and press **Left Alt** to dodge.
-
-## Use
-
-- Hold a movement key and press the dodge button. A/D/S dodge left / right /
-  back; forward-only movement does nothing.
-- In double-tap mode, double-tap the configured keys (Z / C / S by default).
-- 15 stamina per dodge. Low stamina and open menus/dialogs block dodges.
-- Right after an energy drink, dodges are free for the same short window in
-  which the game itself stops stamina drain.
-
-## Configure
-
-Edit **`ConfigurableDodgeMod.ini`** in the mod folder and save - changes apply
-in game within ~2 seconds. No setup tool, no restart.
-
-| Key | Meaning | Default |
-| --- | --- | --- |
-| `Modality` | `button` (hold a movement key + press `ButtonKey`) or `doubletap` | `button` |
-| `ButtonKey` | dodge button (key name, VK hex or mouse button) | `Left Alt` |
-| `DoubleTapLeft/Right/Back` | double-tap keys | `Z` / `C` / `S` |
-| `DoubleTapWindow` | max seconds between taps (try 0.12-0.20) | `0.155` |
-| `SideHorizontal/SideVertical` | side dodge force (cm/s) | `650` / `500` |
-| `BackHorizontal/BackVertical` | back dodge force (cm/s) | `900` / `200` |
-| `StaminaCost` | stamina per dodge (`0` = free) | `15` |
-| `EnergyDrinkEffect` | free dodges during the drink's no-drain window (`1` / `0`) | `1` |
-| `EnergyDrinkFreeSeconds` | length of that window (seconds) | `4.5` |
-| `EnergyDrinkOveruseJump` | advanced; leave at `50` | `50` |
-
-## Bindable keys
-
-`ButtonKey` and `DoubleTapLeft/Right/Back` accept an engine key name, a VK hex
-code (`0x58`) or a mouse button. Names are case-sensitive.
-
-| Group | Names |
-| --- | --- |
-| Letters | `A` - `Z` |
-| Digits | `0` - `9` (or `Zero` - `Nine`) |
-| Function | `F1` - `F12` (F13-F24 do not exist in the engine) |
-| Arrows | `Left` `Up` `Right` `Down` |
-| Edit | `Home` `End` `PageUp` `PageDown` `Insert` `Delete` `BackSpace` |
-| Misc | `Tab` `Enter` `Escape` `SpaceBar` `Pause` `CapsLock` `NumLock` `ScrollLock` |
-| Modifiers | `LeftShift` `RightShift` `LeftControl` `RightControl` `LeftAlt` `RightAlt` `LeftWindows` `RightWindows` |
-| Symbols | `Semicolon` `Equals` `Comma` `Hyphen` `Period` `Slash` `Tilde` `LeftBracket` `Backslash` `RightBracket` `Apostrophe` |
-| Numpad | `NumPadZero` - `NumPadNine` `Multiply` `Add` `Subtract` `Decimal` `Divide` |
-| Mouse | `LeftMouseButton` `RightMouseButton` `MiddleMouseButton` `ThumbMouseButton` (Mouse 4) `ThumbMouseButton2` (Mouse 5) |
-
-Aliases: `Left Alt`, `Right Ctrl`, `Left Shift`, `Space`, `Backspace`,
-`Left Win`, and the literal symbol keys `;` `=` `,` `-` `.` `/` `[` `]` `\` `'`.
-
-Examples:
-
-```ini
-ButtonKey=Left Alt
-ButtonKey=ThumbMouseButton2
-ButtonKey=0x58
-DoubleTapLeft=Q
+```
+ConfigurableDodgeNative\
+  dlls\main.dll              <- compiler output
+  ConfigurableDodge.ini      <- edit this, applies within ~1 s in game
+  README.txt
+  ConfigurableDodge.log      <- written at runtime when Log=1
 ```
 
-## Requirements
+Uninstall = delete the folder and the `mods.txt` line. UE4SS calls
+`uninstall_mod`, which restores the game's `PeekMessageW` import before the DLL
+is freed.
 
-| Dependency | Version |
-| --- | --- |
-| S.T.A.L.K.E.R. 2: Heart of Chornobyl | update 2.1 |
-| UE4SS | the update 2.1 build (Nexus mod 3096) - included in the `_full` package |
+## Why this loader
 
-## Credits
+The previous prototype injected itself by spoofing `version.dll`, which is a
+system DLL that other modules also import. A C++ mod folder loaded by UE4SS is
+the documented extension point: UE4SS loads `dlls\main.dll`, calls `start_mod`,
+and calls `uninstall_mod` on shutdown. The mod uses no UE4SS headers, so it is
+insensitive to UE4SS API churn: `start_mod` returns `nullptr` deliberately, so
+UE4SS never calls a `CppUserModBase` virtual on a fabricated object.
 
-- Dodge concept: **rbwadle** (Nexus 1243) - the original pak mod cannot load on
-  update 2.0
-- **UE4SS** (RE-UE4SS, MIT) and the community compatibility fix (Nexus 2341)
+## What it does
+
+`start_mod` starts one helper thread that:
+
+1. waits for the main module and `user32.dll`,
+2. resolves the game's `PeekMessageW` import slot and rewrites it to our detour,
+3. exits. The detour then ticks the mod on the game thread at 10 ms.
+
+A dodge scans `GUObjectArray` for the local `APlayerController` (identified by
+the `ULocalPlayer::PlayerController` back-pointer), reads control rotation,
+spends stamina through the game's own getters/setters, and calls
+`ACharacter::LaunchCharacter` through the vtable.
+
+## Verified constants
+
+| Constant | Value | How |
+| --- | --- | --- |
+| `FUObjectArray` RVA | `0xA0D4980` | UE4SS's own `GUObjectArray` signature on this build resolves to it |
+| `PeekMessageW` IAT slot | `0x9C37B30` | Import-directory walk; the slot is `USER32.dll!PeekMessageW` |
+| `GetSP` / `ForceSetSP` / `GetOveruse` | `0x1FB413C` / `0x68984C2` / `0x6896BB6` | Disassembly: `(pawn)`-taking float getter, int32 setter, float getter |
+| `Controller::Pawn` | `+0x2F0` | `ue4ss\UE4SS_ObjectDump.txt` |
+| `Controller::ControlRotation` | `+0x328` | same dump |
+| `PlayerController::Player` | `+0x350` | same dump |
+| `PlayerController::PlayerCameraManager` | `+0x368` | same dump |
+| `Player::PlayerController` | `+0x30` | same dump |
+| `Pawn::LastControlInputVector` | `+0x310` | same dump (FVector, 3 doubles) |
+| `PlayerController::bShowMouseCursor` | `+0x56C`, bit 0 | same dump (`fm: 1 bm: 1`; only bit 0 may be tested) |
+| `ACharacter::LaunchCharacter` vtable slot | `0x948` | Runtime vtable from a loaded save; slot resolves to `0x35ADC38`, which reads `CharacterMovement` at `+0x338` (matches `Character:CharacterMovement`), takes the 24-byte `FVector` by pointer plus two bools, and adds it to the velocity |
+
+## Not statically verified (fails safe at runtime)
+
+- Nothing structural is left unverified. The controller scan still logs its
+  stage counts (`scan: N objects, M with player pointer, K with
+  player->controller match`) so a build change that moves an offset fails
+  visibly instead of silently.
+
+## Fixes over the previous prototype
+
+1. **UE5 large-world-coordinates.** `FVector`/`FRotator` are three doubles
+   (24 bytes). The old code passed a 12-byte struct into `LaunchCharacter`,
+   which reads 24 bytes.
+2. **Init thread actually started.** `DllMain` had `// proxy-only test` where the
+   thread belonged, so the hook, config and tick never ran.
+3. **Direction from `Pawn::LastControlInputVector`** (`+0x310`, verified in the
+   object dump) dotted against control-rotation yaw, matching the Lua version's
+   camera-relative behaviour.
+4. **Game-thread latch fixed.** `DllMain` used to pin `g_gameThread` to the
+   thread that loaded the DLL — under UE4SS that is the loader thread, so every
+   game-thread tick was rejected. The thread is now pinned on the first
+   `PeekMessage` call.
+5. **Guarded launch**: readable vtable slot, in-image target, finite velocity.
+6. **Live config reload**, so forces and stamina cost are edited in game.
+7. **Static link**: no `libwinpthread` dependency.
+
+## Note on the missing-saves symptom
+
+It is unrelated to this mod. `Saved\NULL\` vs `Saved\STEAM\` is the game's
+online-subsystem profile folder. The 30 saves live in
+`%LOCALAPPDATA%\Stalker2\Saved\STEAM\SaveGames\Data`. See the session report.

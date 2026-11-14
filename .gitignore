@@ -1,3 +1,1 @@
-/tools
-dist/
-docs/
+*.log
