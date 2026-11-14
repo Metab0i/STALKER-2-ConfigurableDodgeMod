@@ -32,15 +32,7 @@ Set `EnergyDrinkEffect=0` to ignore it.
 
 ## Install
 
-### Full package (UE4SS not installed)
-
-1. Copy the contents of the zip into
-   `Stalker2\Binaries\Win64\` - the folder containing
-   `Stalker2-Win64-Shipping.exe`.
-2. Launch the game. Done - the package includes the update 2.1 UE4SS build with
-   its Stalker2 signatures.
-
-### Mod-only package (UE4SS already installed)
+Requires an existing update 2.1 UE4SS installation.
 
 1. Copy the `ConfigurableDodgeMod` folder into
    `Stalker2\Binaries\Win64\ue4ss\Mods\`.
@@ -112,7 +104,7 @@ DoubleTapLeft=Q
 | Dependency | Version |
 | --- | --- |
 | S.T.A.L.K.E.R. 2: Heart of Chornobyl | update 2.1 |
-| UE4SS | the update 2.1 build (Nexus mod 3096) - included in the `_full` package |
+| UE4SS | the update 2.1 build |
 
 ## Credits
 

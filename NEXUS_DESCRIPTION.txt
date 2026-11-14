@@ -1,17 +1,10 @@
 [size=4][b]Description[/b][/size][size=3][color=#D4D4D8]
 Configurable Dodge Mod adds a stamina-based dodge to S.T.A.L.K.E.R. 2. Hold a movement key and press the dodge button (Left Alt by default) - or double-tap your dodge keys - and Skif dodges left, right or back, camera-relative. Every key and force value is configurable live; no MCM needed.[/color][/size]
 
-[size=4][b]What's new in 3.4[/b][/size][size=3][color=#D4D4D8]
-Fixed Left/Right Alt, Ctrl, and Shift failing after launch or save/reload. All supported keys now use direct UE4SS keybind events, replacing the cloned-FKey workaround and 20 Hz engine input poll while preserving dodge, stamina, and energy-drink behavior. Development diagnostics and redundant runtime code were removed, and both packages were cleaned of local runtime state and unrelated enabled mods. Windows keys are no longer advertised as supported.[/color][/size]
-
 [youtube]aLGJFVEcolc[/youtube]
 
 [size=4][b]Installation[/b][/size][size=3][color=#D4D4D8]
-[i]Full package (no UE4SS yet):[/i] copy the zip contents into
-[/color][/size][code]Stalker2\Binaries\Win64\[/code][size=3][color=#D4D4D8]
-then launch the game.
-
-[i]Mod-only package (UE4SS installed):[/i]
+[i]Requires an existing update 2.1 UE4SS installation:[/i]
 [b]1.[/b] Copy [b]ConfigurableDodgeMod[/b] into
 [/color][/size][code]...\ue4ss\Mods\[/code][size=3][color=#D4D4D8]
 [b]2.[/b] Add to [b]ue4ss\Mods\mods.txt[/b]:
@@ -40,7 +33,7 @@ Default controls: hold [b]A / D / S[/b] and press [b]Left Alt[/b]. Forward-only 
 [size=4][b]Requirements[/b][/size]
 [list]
 [*][size=3][color=#D4D4D8]S.T.A.L.K.E.R. 2: Heart of Chornobyl, update [b]2.1[/b][/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]UE4SS[/b] - the update 2.1 build ([url=https://www.nexusmods.com/stalker2heartofchornobyl/mods/3096]Nexus mod 3096[/url]) - included in the full package[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]UE4SS[/b] - the update 2.1 build ([url=https://www.nexusmods.com/stalker2heartofchornobyl/mods/3096]Nexus mod 3096[/url])[/color][/size][/*]
 [/list]
 
 [size=4][b]Source[/b][/size][size=3][color=#D4D4D8]
