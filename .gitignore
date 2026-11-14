@@ -1,6 +1,5 @@
 /tools
 dist/
-build/
 docs/
 deploy.target
 .hotreload
