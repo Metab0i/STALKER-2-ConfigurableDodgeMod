@@ -1,34 +1,31 @@
 [size=4][b]Description[/b][/size][size=3][color=#D4D4D8]
-Configurable Dodge Mod adds a stamina-based dodge to S.T.A.L.K.E.R. 2. Hold a movement key and press the dodge button (Left Alt by default) - or double-tap your dodge keys - and Skif dodges left, right or back, camera-relative. Every key and force value is configurable live; no MCM needed.[/color][/size]
+Configurable Dodge Mod adds a stamina-based dodge to S.T.A.L.K.E.R. 2. Hold a movement key and press the dodge button (Left Alt by default) - or double-tap your dodge keys - and Skif dodges left, right or back, camera-relative. Keys and forces are configurable live; no MCM needed.
+
+Two builds, same behaviour: a [b]UE4SS (Lua)[/b] script and a [b]DLL (C++)[/b] version that compiles the logic and uses UE4SS only as a loader. Pick one.[/color][/size]
 
 [youtube]aLGJFVEcolc[/youtube]
 
 [size=4][b]Installation[/b][/size][size=3][color=#D4D4D8]
-[i]Requires an existing update 2.1 UE4SS installation:[/i]
-[b]1.[/b] Copy [b]ConfigurableDodgeMod[/b] into
-[/color][/size][code]...\ue4ss\Mods\[/code][size=3][color=#D4D4D8]
-[b]2.[/b] Add to [b]ue4ss\Mods\mods.txt[/b]:
-[/color][/size][code]ConfigurableDodgeMod : 1[/code][size=3][color=#D4D4D8]
-[b]3.[/b] Launch the game.[/color][/size]
+[i]Requires an existing update 2.1 UE4SS installation.[/i]
+
+[b]UE4SS build[/b]
+[b]1.[/b] Copy [b]ConfigurableDodgeMod[/b] into [/color][/size][code]...\ue4ss\Mods\[/code][size=3][color=#D4D4D8]
+[b]2.[/b] Add to [b]ue4ss\Mods\mods.txt[/b]: [/color][/size][code]ConfigurableDodgeMod : 1[/code][size=3][color=#D4D4D8]
+
+[b]DLL build[/b]
+[b]1.[/b] Copy [b]ConfigurableDodgeNative[/b] into [/color][/size][code]...\ue4ss\Mods\[/code][size=3][color=#D4D4D8]
+[b]2.[/b] Add to [b]ue4ss\Mods\mods.txt[/b]: [/color][/size][code]ConfigurableDodgeNative : 1[/code][size=3][color=#D4D4D8]
+
+[b]3.[/b] Launch the game. Uninstall by deleting the folder and its mods.txt line.[/color][/size]
 
 [size=4][b]Configuration[/b][/size][size=3][color=#D4D4D8]
-Edit [b]ConfigurableDodgeMod.ini[/b] in the mod folder and save. Changes apply live within ~2 seconds - no setup tool, no restart.[/color][/size]
+Edit the mod's ini ([b]ConfigurableDodgeMod.ini[/b] for the UE4SS build, [b]ConfigurableDodge.ini[/b] for the DLL build) and save. Changes apply live within ~2 seconds - no setup tool, no restart. Every key is documented in the ini comments.
 
-[list]
-[*][size=3][color=#D4D4D8][b]Modality[/b] - [code]button[/code] (hold a movement key + press the dodge button) or [code]doubletap[/code] (double-tap keys). One is active.[/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]ButtonKey[/b] - the dodge button. Any listed bindable key works: letters, digits, F1-F12, arrows, numpad, Left/Right Alt / Ctrl / Shift, and mouse buttons. All input uses UE4SS keybind events, with no Lua input-polling loop. Default [b]Left Alt[/b]. F13-F24 and Windows keys are not supported.[/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]DoubleTapLeft / Right / Back[/b] - double-tap keys. Default [b]Z / C / S[/b].[/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]DoubleTapWindow[/b] - max seconds between taps. Default [b]0.155[/b].[/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]SideHorizontal / SideVertical[/b] - side dodge force (cm/s). Default [b]650 / 500[/b].[/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]BackHorizontal / BackVertical[/b] - back dodge force (cm/s). Default [b]900 / 200[/b].[/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]StaminaCost[/b] - stamina per dodge. Default [b]15[/b] (vanilla jump).[/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]EnergyDrinkEffect / EnergyDrinkFreeSeconds[/b] - dodges are free for a moment after drinking an energy drink, matching the game's brief no-drain window. Enabled by default; window [b]4.5 s[/b].[/color][/size][/*]
-[/list]
+[b]Modality[/b] - [code]button[/code] (hold a movement key + press the dodge button) or [code]doubletap[/code]. [b]ButtonKey[/b] accepts any bindable key name, a VK hex code ([code]0x58[/code]) or a mouse button; default [b]Left Alt[/b]. [b]DoubleTapLeft / Right / Back[/b] default [b]Z / C / S[/b], window [b]0.155 s[/b]. [b]SideHorizontal / SideVertical[/b] and [b]BackHorizontal / BackVertical[/b] set the forces in cm/s. [b]StaminaCost[/b] defaults to [b]15[/b]. [b]EnergyDrinkEffect[/b] makes dodges free during the game's brief no-drain window after a drink ([b]4.5 s[/b]).
 
-[size=3][color=#D4D4D8]
-[b]Bindable keys:[/b] the full list is in the ini comments and at [url=https://github.com/Metab0i/STALKER-2-ConfigurableDodgeMod#bindable-keys]GitHub README - Bindable keys[/url]. Key names (case-sensitive) or VK hex codes (e.g. [code]0x58[/code]) both work.
+The DLL build adds [b]Cooldown[/b], [b]RequireStamina[/b], [b]RequireCursorFree[/b] and [b]Log[/b].
 
-Default controls: hold [b]A / D / S[/b] and press [b]Left Alt[/b]. Forward-only movement does not dodge; low stamina and open menus/dialogs block dodges. Right after an energy drink, dodges are free for a few seconds (the game's own no-drain window).[/color][/size]
+Default controls: hold [b]A / D / S[/b] and press [b]Left Alt[/b]. Forward-only movement does not dodge; low stamina and open menus/dialogs block dodges.[/color][/size]
 
 [size=4][b]Requirements[/b][/size]
 [list]

@@ -10,9 +10,9 @@ $ProjectRoot = Split-Path -Parent $PSCommandPath
 $Dist = Join-Path $ProjectRoot "dist"
 New-Item -ItemType Directory -Path $Dist -Force | Out-Null
 
-$ModSrc = Join-Path $ProjectRoot "src\ConfigurableDodgeMod"
+$ModSrc = Join-Path $ProjectRoot "src\ConfigurableDodgeMod_UE4SS"
 if (-not (Test-Path (Join-Path $ModSrc "Scripts\main.lua"))) {
-    throw "src\ConfigurableDodgeMod\Scripts\main.lua not found"
+    throw "src\ConfigurableDodgeMod_UE4SS\Scripts\main.lua not found"
 }
 
 $StagingRoot = Join-Path $env:TEMP "opencode\Configurable Dodge Mod_pkg"

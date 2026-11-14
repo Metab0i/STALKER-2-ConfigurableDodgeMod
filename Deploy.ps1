@@ -17,7 +17,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$src = Join-Path $PSScriptRoot "src\ConfigurableDodgeMod"
+$src = Join-Path $PSScriptRoot "src\ConfigurableDodgeMod_UE4SS"
 $SteamAppId = "1643320"
 $GameFolderName = "S.T.A.L.K.E.R. 2 Heart of Chornobyl"
 
