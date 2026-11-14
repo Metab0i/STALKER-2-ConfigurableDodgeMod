@@ -1,6 +1,9 @@
 [size=4][b]Description[/b][/size][size=3][color=#D4D4D8]
 Configurable Dodge Mod adds a stamina-based dodge to S.T.A.L.K.E.R. 2. Hold a movement key and press the dodge button (Left Alt by default) - or double-tap your dodge keys - and Skif dodges left, right or back, camera-relative. Every key and force value is configurable live; no MCM needed.[/color][/size]
 
+[size=4][b]What's new in 3.4[/b][/size][size=3][color=#D4D4D8]
+Fixed Left/Right Alt, Ctrl, and Shift failing after launch or save/reload. All supported keys now use direct UE4SS keybind events, replacing the cloned-FKey workaround and 20 Hz engine input poll while preserving dodge, stamina, and energy-drink behavior. Development diagnostics and redundant runtime code were removed, and both packages were cleaned of local runtime state and unrelated enabled mods. Windows keys are no longer advertised as supported.[/color][/size]
+
 [youtube]aLGJFVEcolc[/youtube]
 
 [size=4][b]Installation[/b][/size][size=3][color=#D4D4D8]
@@ -20,7 +23,7 @@ Edit [b]ConfigurableDodgeMod.ini[/b] in the mod folder and save. Changes apply l
 
 [list]
 [*][size=3][color=#D4D4D8][b]Modality[/b] - [code]button[/code] (hold a movement key + press the dodge button) or [code]doubletap[/code] (double-tap keys). One is active.[/color][/size][/*]
-[*][size=3][color=#D4D4D8][b]ButtonKey[/b] - the dodge button. Any engine key works: letters, digits, F1-F12, arrows, numpad, modifiers (Left Alt / Ctrl / Shift) and mouse buttons. Default [b]Left Alt[/b]. F13-F24 are not engine keys.[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]ButtonKey[/b] - the dodge button. Any listed bindable key works: letters, digits, F1-F12, arrows, numpad, Left/Right Alt / Ctrl / Shift, and mouse buttons. All input uses UE4SS keybind events, with no Lua input-polling loop. Default [b]Left Alt[/b]. F13-F24 and Windows keys are not supported.[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]DoubleTapLeft / Right / Back[/b] - double-tap keys. Default [b]Z / C / S[/b].[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]DoubleTapWindow[/b] - max seconds between taps. Default [b]0.155[/b].[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]SideHorizontal / SideVertical[/b] - side dodge force (cm/s). Default [b]650 / 500[/b].[/color][/size][/*]

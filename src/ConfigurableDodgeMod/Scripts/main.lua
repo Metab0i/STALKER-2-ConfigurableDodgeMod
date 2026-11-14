@@ -1,60 +1,30 @@
--- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v3.3
--- Input: UE4SS keybinds call the dodge directly; modifier-only keys (Alt/
--- Ctrl/Shift) fall back to a light engine key-state check. No listener,
--- no pipe, no hooks.
+-- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v3.4
+-- Input: UE4SS keybind events only, including raw modifier-key bindings.
+-- No listener, no pipe, no hooks, no engine key-state polling.
 -- Config: ConfigurableDodgeMod.ini (live-reloaded).
 
 local UEHelpers = require("UEHelpers")
 
--- generation bump: hot reloads invalidate stale async loops (see file end)
+-- Invalidate stale asynchronous callbacks if UE4SS restarts the mod.
 DodgeMod_Generation = (DodgeMod_Generation or 0) + 1
 local DODGE_MOD_GEN = DodgeMod_Generation
 
--- ================= dev harness =================
--- gated by a ".hotreload" dot-file next to the script; never ships
-local devDir = nil
+-- Discover the installed ini beside the Scripts directory. This path lookup is
+-- production configuration loading, not a development/debug facility.
+local cfgPath = nil
 do
     local src = nil
     pcall(function()
         local s = debug.getinfo(1, "S").source
         src = string.sub(s, 1, 1) == "@" and string.sub(s, 2) or s
     end)
-    if src ~= nil then
-        devDir = string.match(src, "^(.*)[/\\][^/\\]+$")
-    end
-end
-local devEnabled = false
-local cfgPath = nil
-do
-    if devDir ~= nil then
-        local lower = string.lower(devDir)
-        local s = string.match(lower, "()scripts$")
+    local scriptDir = src ~= nil and string.match(src, "^(.*)[/\\][^/\\]+$") or nil
+    if scriptDir ~= nil then
+        local s = string.match(string.lower(scriptDir), "()scripts$")
         if s ~= nil then
-            local root = string.sub(devDir, 1, s - 1)
-            local sep = (string.find(root, "\\", 1, true) ~= nil) and "\\" or "/"
-            cfgPath = root .. "ConfigurableDodgeMod.ini"
-            pcall(function()
-                local h = io.open(devDir .. sep .. ".hotreload", "rb")
-                if h == nil then h = io.open(root .. ".hotreload", "rb") end
-                if h ~= nil then
-                    h:close()
-                    devEnabled = true
-                end
-            end)
+            cfgPath = string.sub(scriptDir, 1, s - 1) .. "ConfigurableDodgeMod.ini"
         end
     end
-end
-
-local function DevLog(line)
-    if not devEnabled or devDir == nil then return end
-    local sep = (string.find(devDir, "\\", 1, true) ~= nil) and "\\" or "/"
-    pcall(function()
-        local h = io.open(devDir .. sep .. "dodge_dev.log", "a")
-        if h ~= nil then
-            h:write(string.format("[g%d +%dms] %s\n", DODGE_MOD_GEN, math.floor((os.clock() % 100000) * 1000), line))
-            h:close()
-        end
-    end)
 end
 
 -- ================= configuration =================
@@ -155,8 +125,6 @@ local energyFreeUntil = 0.0
 local lastOveruse = nil
 local lastOveruseAt = 0.0
 local lastPawnKey = nil
-local keysRetryAt = 0.0
-local keysWarnAt = 0.0
 
 local function Now()
     return os.clock()
@@ -183,9 +151,9 @@ local function PawnKey(obj)
     return key
 end
 
--- Single place that consumes an overuse sample (from the hook or an on-demand
--- read). A sharp rise means a drink was just consumed; a changed pawn resets
--- the baseline so loading a save can never look like a drink.
+-- Single place that consumes a periodic or per-dodge overuse sample. A sharp
+-- rise means a drink was just consumed; a changed pawn resets the baseline so
+-- loading a save can never look like a drink.
 local function ObserveOveruse(v, t, key, recent)
     if v == nil then return end
     if key ~= nil and key ~= lastPawnKey then
@@ -195,7 +163,6 @@ local function ObserveOveruse(v, t, key, recent)
     -- only a jump between two recent samples counts as a drink
     if recent and lastOveruse ~= nil and (v - lastOveruse) >= ENERGY_DRINK_JUMP then
         energyFreeUntil = t + ENERGY_DRINK_FREE_SECONDS
-        DevLog(string.format("energy drink detected (overuse %.1f -> %.1f): dodges free for %.2fs", lastOveruse, v, ENERGY_DRINK_FREE_SECONDS))
     end
     lastOveruseAt = t
     lastOveruse = v
@@ -217,7 +184,6 @@ local function SpendStamina(Pawn)
         RefreshOveruse(Pawn)
     end
     if ENERGY_DRINK_ENABLED and Now() < energyFreeUntil then
-        DevLog("energy drink window active: dodge costs no stamina")
         return true
     end
     local okCur, curSP = pcall(function() return Pawn:GetSP() end)
@@ -230,13 +196,11 @@ local function SpendStamina(Pawn)
             lastStaminaMsg = t
             print(string.format("[Configurable Dodge Mod] not enough stamina (%.1f < %.1f)", curSP, STAMINA_COST))
         end
-        DevLog(string.format("blocked: low stamina %.1f < %.1f", curSP, STAMINA_COST))
         return false
     end
     local newSP = math.floor(curSP - STAMINA_COST)
     if newSP < 0 then newSP = 0 end
     pcall(function() Pawn:ForceSetSP(newSP) end)
-    DevLog(string.format("stamina %.1f -> %.1f", curSP, newSP))
     return true
 end
 
@@ -270,45 +234,23 @@ local function BuildLaunchVector(direction)
 end
 
 local function DoDodge(direction)
-    local dodgeT0 = Now()
-    if Now() - lastDodge < COOLDOWN then
-        DevLog(string.format("press ignored: cooldown (%.2fs left)", COOLDOWN - (Now() - lastDodge)))
-        return
-    end
+    if Now() - lastDodge < COOLDOWN then return end
     local PC = GetPC()
-    if PC == nil then
-        DevLog("press ignored: no player controller")
-        return
-    end
+    if PC == nil then return end
     local Pawn = PC.Pawn
-    if Pawn == nil or not Pawn:IsValid() then
-        DevLog("press ignored: no pawn")
-        return
-    end
+    if Pawn == nil or not Pawn:IsValid() then return end
 
     -- no dodging while gameplay is UI-blocked (stash, conversations, pause)
     local blocked = false
     pcall(function()
         if PC.bShowMouseCursor then blocked = true end
     end)
-    if blocked then
-        DevLog("blocked: menu UI")
-        return
-    end
+    if blocked then return end
 
     local Velocity = BuildLaunchVector(direction)
-    if Velocity == nil then
-        DevLog("press ignored: could not build launch vector")
-        return
-    end
-
-    if not SpendStamina(Pawn) then
-        return
-    end
+    if Velocity == nil or not SpendStamina(Pawn) then return end
 
     lastDodge = Now()
-    DevLog(string.format("dodge dir=%s (handler %.3f ms)", tostring(direction), (Now() - dodgeT0) * 1000))
-
     ExecuteInGameThread(function()
         local ok, err = pcall(function()
             Pawn:LaunchCharacter(Velocity, true, true)
@@ -380,21 +322,13 @@ end
 --- currently pressed; standing still / forward without lateral input = none
 local function HandleButtonPress()
     if MODALITY ~= "button" then return end
-    local t0 = Now()
     local d = GetMoveInputDirection()
-    if d == nil then
-        DevLog(string.format("press: no move input (%.3f ms)", (Now() - t0) * 1000))
-        return
-    end
-    DoDodge(d)
-    DevLog(string.format("press: dodge dir=%s handler=%.3f ms", d, (Now() - t0) * 1000))
+    if d ~= nil then DoDodge(d) end
 end
 
--- ================= engine input (native prototype) =================
--- Reads the configured keys through the game's own input system instead of the
--- PowerShell listener: no external process, no pipe, no window hooks.
--- Keys are resolved from the same ini values Setup writes (VK hex or names,
--- including mouse buttons and modifiers).
+-- ================= UE4SS keybind input =================
+-- Resolves friendly ini aliases and Windows VK-hex values into key names,
+-- then registers the corresponding UE4SS keybind events.
 
 local FKEY_BY_VK = {
     [0x08] = "BackSpace", [0x09] = "Tab", [0x0D] = "Enter", [0x13] = "Pause", [0x14] = "CapsLock",
@@ -430,7 +364,7 @@ local NAME_ALIAS = {
     ["/"] = "Slash", ["`"] = "Tilde", ["["] = "LeftBracket", ["\\"] = "Backslash",
     ["]"] = "RightBracket", ["'"] = "Apostrophe",
 }
--- engine key enum names used for keybind registration
+-- UE4SS Key enum names used for ordinary keybind registration
 local KEYENUM_BY_NAME = {}
 do
     local function add(n, kname)
@@ -453,6 +387,7 @@ do
     add("BackSpace", "BACKSPACE"); add("Tab", "TAB"); add("Enter", "RETURN"); add("Escape", "ESCAPE")
     add("SpaceBar", "SPACE"); add("Pause", "PAUSE"); add("CapsLock", "CAPS_LOCK")
     add("NumLock", "NUM_LOCK"); add("ScrollLock", "SCROLL_LOCK")
+    add("LeftWindows", "LEFT_WIN"); add("RightWindows", "RIGHT_WIN")
     for i = 0, 9 do add("NumPad" .. DIG[i + 1], "NUM_" .. DIG[i + 1]) end
     add("Multiply", "MULTIPLY"); add("Add", "ADD"); add("Subtract", "SUBTRACT")
     add("Decimal", "DECIMAL"); add("Divide", "DIVIDE")
@@ -464,8 +399,18 @@ do
     add("MiddleMouseButton", "MIDDLE_MOUSE_BUTTON"); add("ThumbMouseButton", "XBUTTON_ONE")
     add("ThumbMouseButton2", "XBUTTON_TWO")
 end
-local KEYMAP_COUNT = 0
-for _ in pairs(KEYENUM_BY_NAME) do KEYMAP_COUNT = KEYMAP_COUNT + 1 end
+
+-- UE4SS omits modifiers from its public Key table, but its Win32 input source
+-- still polls their virtual-key codes. A modifier press also reports its generic
+-- modifier bit, so both the key and that modifier must be registered.
+local MODIFIER_BIND_BY_NAME = {
+    LeftShift    = { key = 0xA0, modifiers = { 0x10 } },
+    RightShift   = { key = 0xA1, modifiers = { 0x10 } },
+    LeftControl  = { key = 0xA2, modifiers = { 0x11 } },
+    RightControl = { key = 0xA3, modifiers = { 0x11 } },
+    LeftAlt      = { key = 0xA4, modifiers = { 0x12 } },
+    RightAlt     = { key = 0xA5, modifiers = { 0x12 } },
+}
 
 local function ResolveFKeyName(raw)
     if raw == nil then return nil end
@@ -479,84 +424,18 @@ local function ResolveFKeyName(raw)
     return nil
 end
 
--- This UE4SS build exposes FName but not an FKey constructor, so an FKey
--- instance is cloned from the player input's debug exec bindings and renamed.
-local function MakeFKey(name, index)
-    if name == nil then return nil end
-    local PC = GetPC()
-    if PC == nil then return nil end
-    local okPI, PI = pcall(function() return PC.PlayerInput end)
-    if not okPI or PI == nil then return nil end
-    local okB, binds = pcall(function() return PI.DebugExecBindings end)
-    if not okB or binds == nil then return nil end
-    local okK, key = pcall(function() return binds[index or 1].Key end)
-    if not okK or key == nil then return nil end
-    local okSet = pcall(function() key.KeyName = UEHelpers.FindOrAddFName(name) end)
-    if not okSet then return nil end
-    return key
-end
-
 local BtnName, DTName = nil, { left = nil, right = nil, back = nil }
-local BtnKey, DTKey = nil, { left = nil, right = nil, back = nil }
-local prevDown = {}
 local lastTap = { left = 0.0, right = 0.0, back = 0.0 }
 
-local function BuildKeys(quiet)
+local function ResolveInputKeys()
     BtnName = ResolveFKeyName(KEY_DODGE_BTN)
     DTName.left = ResolveFKeyName(DT_LEFT)
     DTName.right = ResolveFKeyName(DT_RIGHT)
     DTName.back = ResolveFKeyName(DT_BACK)
-    BtnKey = MakeFKey(BtnName, 1)
-    DTKey.left = MakeFKey(DTName.left, 2)
-    DTKey.right = MakeFKey(DTName.right, 3)
-    DTKey.back = MakeFKey(DTName.back, 4)
-    prevDown = {}
     lastTap = { left = 0.0, right = 0.0, back = 0.0 }
-    if quiet then return end
-    DevLog(string.format("native input keys: btn=%s dt=%s/%s/%s structs=%s/%s/%s/%s",
-        tostring(BtnName), tostring(DTName.left), tostring(DTName.right), tostring(DTName.back),
-        tostring(BtnKey ~= nil), tostring(DTKey.left ~= nil), tostring(DTKey.right ~= nil), tostring(DTKey.back ~= nil)))
-    local function keyName(k)
-        if k == nil then return "nil" end
-        local ok, v = pcall(function() return k.KeyName:ToString() end)
-        if ok then return tostring(v) end
-        return tostring(k.KeyName)
-    end
-    DevLog("native key names: btn=" .. keyName(BtnKey) .. " dt=" .. keyName(DTKey.left) .. "/" .. keyName(DTKey.right) .. "/" .. keyName(DTKey.back))
 end
 
-local function KeysMissing()
-    if MODALITY == "button" then return BtnKey == nil end
-    return DTKey.left == nil or DTKey.right == nil or DTKey.back == nil
-end
-
--- edge detection on the engine's own key state (frame independent)
-local lastPcWarn = 0.0
-local function KeyJustPressed(id, key)
-    if key == nil then return false end
-    local PC = GetPC()
-    if PC == nil then
-        if Now() - lastPcWarn > 10.0 then
-            lastPcWarn = Now()
-            DevLog("native input: no player controller")
-        end
-        return false
-    end
-    local ok, down = pcall(function() return PC:IsInputKeyDown(key) end)
-    if not ok then
-        if Now() - lastPcWarn > 10.0 then
-            lastPcWarn = Now()
-            DevLog("native input: IsInputKeyDown failed for " .. id)
-        end
-        down = false
-    end
-    local pressed = down and not prevDown[id]
-    prevDown[id] = down
-    if pressed then DevLog("engine key down: " .. id) end
-    return pressed
-end
-
-ExecuteInGameThread(function() pcall(BuildKeys) end)
+ExecuteInGameThread(function() pcall(ResolveInputKeys) end)
 
 -- ---------------- input: keybind events ----------------
 local function TapKey(d)
@@ -571,77 +450,51 @@ end
 
 DodgeMod_KeyActions = {}
 
-local function RegisterInputKey(ke)
+local function RegisterInputKey(ke, modifiers)
     if ke == nil then return end
-    local okReg, isReg = pcall(function() return IsKeyBindRegistered(ke, {}) end)
+    modifiers = modifiers or {}
+    local okReg, isReg = pcall(function() return IsKeyBindRegistered(ke, modifiers) end)
     if okReg and isReg then return end
     local ok, err = pcall(function()
-        RegisterKeyBindAsync(ke, {}, function()
+        RegisterKeyBindAsync(ke, modifiers, function()
             local act = DodgeMod_KeyActions[ke]
             if act == nil then return end
             ExecuteInGameThread(function()
                 local ok2, err2 = pcall(act)
-                if not ok2 then DevLog("keybind action error: " .. tostring(err2)) end
+                if not ok2 then print("[Configurable Dodge Mod] keybind action error: " .. tostring(err2)) end
             end)
         end)
     end)
-    DevLog("keybind registered key=" .. tostring(ke) .. " ok=" .. tostring(ok) .. " " .. tostring(err or ""))
+    if not ok then
+        print("[Configurable Dodge Mod] keybind registration failed for key=" .. tostring(ke) .. ": " .. tostring(err))
+    end
 end
 
 local function EnsureInputBinds()
     local desired = {}
-    DodgeMod_FallbackButton = false
-    DodgeMod_FallbackDT = { left = false, right = false, back = false }
+    local desiredModifiers = {}
+    local function addBind(name, action)
+        local spec = name ~= nil and MODIFIER_BIND_BY_NAME[name] or nil
+        local ke = spec ~= nil and spec.key or (name ~= nil and KEYENUM_BY_NAME[name] or nil)
+        if ke == nil then return end
+        desired[ke] = action
+        desiredModifiers[ke] = spec ~= nil and spec.modifiers or {}
+    end
+
     if MODALITY == "button" then
-        local ke = nil
-        if BtnName ~= nil then ke = KEYENUM_BY_NAME[BtnName] end
-        if ke ~= nil then desired[ke] = HandleButtonPress else DodgeMod_FallbackButton = true end
+        addBind(BtnName, HandleButtonPress)
     else
         for _, d in ipairs({ "left", "right", "back" }) do
-            local nm = DTName[d]
-            local ke = nil
-            if nm ~= nil then ke = KEYENUM_BY_NAME[nm] end
-            if ke ~= nil then desired[ke] = function() TapKey(d) end
-            else DodgeMod_FallbackDT[d] = true end
+            addBind(DTName[d], function() TapKey(d) end)
         end
     end
     DodgeMod_KeyActions = desired
-    for ke in pairs(desired) do RegisterInputKey(ke) end
-    DodgeMod_FallbackNeeded = DodgeMod_FallbackButton or DodgeMod_FallbackDT.left or DodgeMod_FallbackDT.right or DodgeMod_FallbackDT.back
+    for ke in pairs(desired) do RegisterInputKey(ke, desiredModifiers[ke]) end
 end
 
 pcall(EnsureInputBinds)
 
--- Modifier-only keys (Alt/Ctrl/Shift) have no Key enum entry: poll those only.
-local fallbackQueued = false
-LoopAsync(50, function()
-    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
-    if not DodgeMod_FallbackNeeded then return false end
-    if fallbackQueued then return false end
-    fallbackQueued = true
-    ExecuteInGameThread(function()
-        fallbackQueued = false
-        pcall(function()
-            local PC = GetPC()
-            if PC == nil then return end
-            local pawn = PC.Pawn
-            if pawn == nil or not pawn:IsValid() then return end
-            if DodgeMod_FallbackButton and BtnKey ~= nil and KeyJustPressed("fb_btn", BtnKey) then
-                HandleButtonPress()
-            end
-            if MODALITY == "doubletap" then
-                for _, d in ipairs({ "left", "right", "back" }) do
-                    if DodgeMod_FallbackDT[d] and DTKey[d] ~= nil and KeyJustPressed("fb_dt" .. d, DTKey[d]) then
-                        TapKey(d)
-                    end
-                end
-            end
-        end)
-    end)
-    return false
-end)
-
--- 1 s maintenance: key resolution, energy baseline, keybind upkeep
+-- 1 s maintenance: energy baseline and keybind upkeep
 LoopAsync(1000, function()
     if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
     ExecuteInGameThread(function()
@@ -649,26 +502,22 @@ LoopAsync(1000, function()
             local PC = GetPC()
             if PC == nil then return end
             local pawn = PC.Pawn
-            if pawn ~= nil and pawn:IsValid() then
-                if KeysMissing() then BuildKeys(true) end
-                if ENERGY_DRINK_ENABLED then RefreshOveruse(pawn) end
+            if pawn ~= nil and pawn:IsValid() and ENERGY_DRINK_ENABLED then
+                RefreshOveruse(pawn)
             end
             EnsureInputBinds()
         end)
     end)
     return false
 end)
-print("[Configurable Dodge Mod] input: keybind events (modifier fallback poll) keymap=" .. tostring(KEYMAP_COUNT))
-print(string.format("[Configurable Dodge Mod] v3.3 loaded - keybind input - mode: %s (%s), stamina cost %.0f",
+print(string.format("[Configurable Dodge Mod] v3.4 loaded - keybind input - mode: %s (%s), stamina cost %.0f",
     MODALITY,
     MODALITY == "button" and ("dodge button " .. KEY_DODGE_BTN) or ("double-tap " .. DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK),
     STAMINA_COST))
-DevLog(string.format("boot v3.3 gen=%d input=keybind mode=%s btn=%s dt=%s/%s/%s", DODGE_MOD_GEN, MODALITY, KEY_DODGE_BTN, DT_LEFT, DT_RIGHT, DT_BACK))
 
 -- ================= ini live reload (always on) =================
--- the listener re-reads the ini every ~2 s for key detection; this keeps the
--- in-game values (forces, stamina, modality, window) in sync the same way, so
--- editing ConfigurableDodgeMod.ini applies live - no restart needed
+-- File I/O stays off the game thread; applying the new values is scheduled on
+-- the game thread. Changes apply within about two seconds without a restart.
 if cfgPath ~= nil then
     LoopAsync(2000, function()
         if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
@@ -683,49 +532,17 @@ if cfgPath ~= nil then
                 ExecuteInGameThread(function()
                     local ok2, err2 = pcall(function()
                         ApplyConfig(newIni)
-                        BuildKeys()
-                        DevLog("ini reloaded: mode=" .. MODALITY .. " btn=" .. KEY_DODGE_BTN)
+                        ResolveInputKeys()
                         print(string.format("[Configurable Dodge Mod] ini reloaded - mode %s, dodge button %s, stamina %.0f",
                             MODALITY, MODALITY == "button" and KEY_DODGE_BTN or (DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK), STAMINA_COST))
                     end)
-                    if not ok2 then DevLog("ini apply error: " .. tostring(err2)) end
+                    if not ok2 then print("[Configurable Dodge Mod] ini apply error: " .. tostring(err2)) end
                 end)
             end
         end)
-        if not ok then DevLog("ini watcher error: " .. tostring(err)) end
+        if not ok then print("[Configurable Dodge Mod] ini watcher error: " .. tostring(err)) end
         return false
     end)
-end
-
--- ================= hot reload (dev only, .hotreload gated) =================
-DodgeMod_BootComplete = DODGE_MOD_GEN
--- watches main.lua only; the ini has its own always-on watcher above
-if devEnabled and devDir ~= nil then
-    local sep = (string.find(devDir, "\\", 1, true) ~= nil) and "\\" or "/"
-    local selfPath = devDir .. sep .. "main.lua"
-    local WatchMain = nil
-    pcall(function()
-        local h1 = io.open(selfPath, "rb"); if h1 ~= nil then WatchMain = h1:read("*a"); h1:close() end
-    end)
-    LoopAsync(1200, function()
-        if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
-        local newMain
-        pcall(function()
-            local h1 = io.open(selfPath, "rb"); if h1 ~= nil then newMain = h1:read("*a"); h1:close() end
-        end)
-        if newMain == nil or newMain == WatchMain then return false end
-        WatchMain = newMain
-        DevLog("hot reload: main.lua changed")
-        DodgeMod_Generation = DODGE_MOD_GEN + 1
-        local okR, errR = pcall(dofile, selfPath)
-        if not okR or DodgeMod_BootComplete ~= DodgeMod_Generation then
-            if not okR then DevLog("RELOAD ERROR: " .. tostring(errR)) else DevLog("RELOAD ERROR: chunk did not finish booting") end
-            DodgeMod_Generation = DODGE_MOD_GEN
-            return false
-        end
-        return true
-    end)
-    DevLog("hot reload active")
 end
 
 

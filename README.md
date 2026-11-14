@@ -13,16 +13,14 @@ editing a single ini file, live.
 
 ## How key detection works
 
-Dodges are driven by the game's own input events: the configured key is
-registered with UE4SS as a keybind, so a press calls the dodge directly (no
-polling loop). Modifier-only bindings (Left Alt / Ctrl / Shift) have no
-engine key-enum entry, so those fall back to a light 20 Hz check of the
-engine's key state. Nothing external runs: no helper process, no console
-window.
+Dodges are driven entirely by UE4SS keybind events: the configured key is
+registered as a keybind, so a press calls the dodge directly. Left/Right Alt,
+Ctrl, and Shift use their Windows virtual-key codes plus UE4SS's corresponding
+modifier state. There is no Lua input-polling loop, engine key-state polling,
+helper process, or console window.
 
-This works for any key the engine knows: letters, digits, F1-F12, arrows,
-numpad, mouse buttons, and modifiers via the fallback. F13-F24 have no
-engine key and cannot be used.
+All keys listed below are supported. F13-F24 and the Windows keys are not
+advertised as supported bindings.
 
 ## Energy drink interaction
 
@@ -91,13 +89,14 @@ code (`0x58`) or a mouse button. Names are case-sensitive.
 | Arrows | `Left` `Up` `Right` `Down` |
 | Edit | `Home` `End` `PageUp` `PageDown` `Insert` `Delete` `BackSpace` |
 | Misc | `Tab` `Enter` `Escape` `SpaceBar` `Pause` `CapsLock` `NumLock` `ScrollLock` |
-| Modifiers | `LeftShift` `RightShift` `LeftControl` `RightControl` `LeftAlt` `RightAlt` `LeftWindows` `RightWindows` |
+| Modifiers | `LeftShift` `RightShift` `LeftControl` `RightControl` `LeftAlt` `RightAlt` |
 | Symbols | `Semicolon` `Equals` `Comma` `Hyphen` `Period` `Slash` `Tilde` `LeftBracket` `Backslash` `RightBracket` `Apostrophe` |
 | Numpad | `NumPadZero` - `NumPadNine` `Multiply` `Add` `Subtract` `Decimal` `Divide` |
 | Mouse | `LeftMouseButton` `RightMouseButton` `MiddleMouseButton` `ThumbMouseButton` (Mouse 4) `ThumbMouseButton2` (Mouse 5) |
 
-Aliases: `Left Alt`, `Right Ctrl`, `Left Shift`, `Space`, `Backspace`,
-`Left Win`, and the literal symbol keys `;` `=` `,` `-` `.` `/` `[` `]` `\` `'`.
+Aliases: `Left Alt`, `Right Alt`, `Left Ctrl`, `Right Ctrl`, `Left Shift`,
+`Right Shift`, `Left Control`, `Right Control`, `Space`, `Backspace`, and the
+literal symbol keys `;` `=` `,` `-` `.` `/` `[` `]` `\` `'`.
 
 Examples:
 
