@@ -30,8 +30,7 @@ Requires an existing update 2.1 UE4SS installation.
 **DLL variant**
 
 1. Copy `dist/ConfigurableDodgeNative` into `Stalker2\Binaries\Win64\ue4ss\Mods\`.
-2. Add `ConfigurableDodgeNative : 1` to `ue4ss\Mods\mods.txt` (keep the bundled
-   `enabled.txt` in the folder).
+2. Add `ConfigurableDodgeNative : 1` to `ue4ss\Mods\mods.txt`.
 3. Start the game.
 
 Uninstall either variant by deleting its folder and its `mods.txt` line.
@@ -63,8 +62,33 @@ g++ -std=c++17 -O2 -shared -static -o dist\ConfigurableDodgeNative\dlls\main.dll
 ```
 
 Close the game before replacing `dlls\main.dll`; Windows holds the loaded image
-open. Offsets are verified against build `a6b31ee`; a game update needs
-`src/ConfigurableDodgeMod_DLL/README.txt`'s verification steps repeated.
+open. Everything the DLL assumes about the game was read out of build
+`a6b31ee`: `FUObjectArray` RVA `0xA0D4980`, the `PeekMessageW` IAT slot
+`0x9C37B30`, the stamina/overuse function RVAs, the struct offsets in
+`ue4ss\UE4SS_ObjectDump.txt`, and the `LaunchCharacter` vtable slot `0x948`.
+A game update invalidates them; the mod logs its scan stages and refuses any
+launch whose target is outside the game image instead of crashing.
+
+## Bindable keys
+
+`ButtonKey` and the `DoubleTap` keys accept:
+
+| Group | Names |
+| --- | --- |
+| Letters | `A` – `Z` |
+| Digits | `0` – `9`, or `Zero` – `Nine` |
+| Function | `F1` – `F24` |
+| Arrows | `Left` `Up` `Right` `Down` |
+| Edit | `Home` `End` `PageUp` `PageDown` `Insert` `Delete` `BackSpace` |
+| Misc | `Tab` `Enter` `Escape` `SpaceBar` `Pause` `CapsLock` `NumLock` `ScrollLock` |
+| Modifiers | `LeftShift` `RightShift` `LeftControl` `RightControl` `LeftAlt` `RightAlt` |
+| Symbols | `Semicolon` `Equals` `Comma` `Hyphen` `Period` `Slash` `Tilde` `LeftBracket` `Backslash` `RightBracket` `Apostrophe` |
+| Numpad | `NumPadZero` – `NumPadNine` `Multiply` `Add` `Subtract` `Decimal` `Divide` |
+| Mouse | `LeftMouseButton` `RightMouseButton` `MiddleMouseButton` `ThumbMouseButton` (4) `ThumbMouseButton2` (5) |
+
+Aliases: `Left Alt`, `Right Alt`, `Left Ctrl`, `Right Ctrl`, `Left Shift`,
+`Right Shift`, `Space`, `Backspace`. A VK hex code such as `0x58` also works.
+Names are matched case-insensitively.
 
 ## Behaviour
 

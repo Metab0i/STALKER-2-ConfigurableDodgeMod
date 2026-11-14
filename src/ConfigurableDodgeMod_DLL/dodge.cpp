@@ -337,25 +337,105 @@ namespace
             }
         }
 
-        if (lstrcmpiW(value, L"Left Alt") == 0) return VK_LMENU;
-        if (lstrcmpiW(value, L"Right Alt") == 0) return VK_RMENU;
-        if (lstrcmpiW(value, L"Left Ctrl") == 0) return VK_LCONTROL;
-        if (lstrcmpiW(value, L"Left Control") == 0) return VK_LCONTROL;
-        if (lstrcmpiW(value, L"Right Ctrl") == 0) return VK_RCONTROL;
-        if (lstrcmpiW(value, L"Right Control") == 0) return VK_RCONTROL;
-        if (lstrcmpiW(value, L"Left Shift") == 0) return VK_LSHIFT;
-        if (lstrcmpiW(value, L"Right Shift") == 0) return VK_RSHIFT;
-        if (lstrcmpiW(value, L"Space") == 0) return VK_SPACE;
-        if (lstrcmpiW(value, L"SpaceBar") == 0) return VK_SPACE;
-        if (lstrcmpiW(value, L"Tab") == 0) return VK_TAB;
-        if (lstrcmpiW(value, L"Enter") == 0) return VK_RETURN;
-        if (lstrcmpiW(value, L"Escape") == 0) return VK_ESCAPE;
-        if (lstrcmpiW(value, L"Backspace") == 0) return VK_BACK;
-        if (lstrcmpiW(value, L"Mouse Left") == 0) return VK_LBUTTON;
-        if (lstrcmpiW(value, L"Mouse Right") == 0) return VK_RBUTTON;
-        if (lstrcmpiW(value, L"Mouse Middle") == 0) return VK_MBUTTON;
-        if (lstrcmpiW(value, L"Mouse 4") == 0) return VK_XBUTTON1;
-        if (lstrcmpiW(value, L"Mouse 5") == 0) return VK_XBUTTON2;
+        // Names the ini banner advertises. Single characters and F-keys are
+        // handled above; this table covers engine names and their aliases.
+        struct KeyName
+        {
+            const wchar_t* name;
+            int vk;
+        };
+
+        static constexpr KeyName names[] = {
+            {L"LeftMouseButton", VK_LBUTTON},
+            {L"RightMouseButton", VK_RBUTTON},
+            {L"MiddleMouseButton", VK_MBUTTON},
+            {L"ThumbMouseButton", VK_XBUTTON1},
+            {L"ThumbMouseButton2", VK_XBUTTON2},
+            {L"Mouse Left", VK_LBUTTON},
+            {L"Mouse Right", VK_RBUTTON},
+            {L"Mouse Middle", VK_MBUTTON},
+            {L"Mouse 4", VK_XBUTTON1},
+            {L"Mouse 5", VK_XBUTTON2},
+            {L"NumPadZero", VK_NUMPAD0},
+            {L"NumPadOne", VK_NUMPAD1},
+            {L"NumPadTwo", VK_NUMPAD2},
+            {L"NumPadThree", VK_NUMPAD3},
+            {L"NumPadFour", VK_NUMPAD4},
+            {L"NumPadFive", VK_NUMPAD5},
+            {L"NumPadSix", VK_NUMPAD6},
+            {L"NumPadSeven", VK_NUMPAD7},
+            {L"NumPadEight", VK_NUMPAD8},
+            {L"NumPadNine", VK_NUMPAD9},
+            {L"Multiply", VK_MULTIPLY},
+            {L"Add", VK_ADD},
+            {L"Subtract", VK_SUBTRACT},
+            {L"Decimal", VK_DECIMAL},
+            {L"Divide", VK_DIVIDE},
+            {L"Zero", '0'},
+            {L"One", '1'},
+            {L"Two", '2'},
+            {L"Three", '3'},
+            {L"Four", '4'},
+            {L"Five", '5'},
+            {L"Six", '6'},
+            {L"Seven", '7'},
+            {L"Eight", '8'},
+            {L"Nine", '9'},
+            {L"Left", VK_LEFT},
+            {L"Up", VK_UP},
+            {L"Right", VK_RIGHT},
+            {L"Down", VK_DOWN},
+            {L"Home", VK_HOME},
+            {L"End", VK_END},
+            {L"PageUp", VK_PRIOR},
+            {L"PageDown", VK_NEXT},
+            {L"Insert", VK_INSERT},
+            {L"Delete", VK_DELETE},
+            {L"BackSpace", VK_BACK},
+            {L"Backspace", VK_BACK},
+            {L"Tab", VK_TAB},
+            {L"Enter", VK_RETURN},
+            {L"Escape", VK_ESCAPE},
+            {L"SpaceBar", VK_SPACE},
+            {L"Space", VK_SPACE},
+            {L"Pause", VK_PAUSE},
+            {L"CapsLock", VK_CAPITAL},
+            {L"NumLock", VK_NUMLOCK},
+            {L"ScrollLock", VK_SCROLL},
+            {L"LeftShift", VK_LSHIFT},
+            {L"RightShift", VK_RSHIFT},
+            {L"Left Shift", VK_LSHIFT},
+            {L"Right Shift", VK_RSHIFT},
+            {L"LeftControl", VK_LCONTROL},
+            {L"RightControl", VK_RCONTROL},
+            {L"Left Ctrl", VK_LCONTROL},
+            {L"Left Control", VK_LCONTROL},
+            {L"Right Ctrl", VK_RCONTROL},
+            {L"Right Control", VK_RCONTROL},
+            {L"LeftAlt", VK_LMENU},
+            {L"RightAlt", VK_RMENU},
+            {L"Left Alt", VK_LMENU},
+            {L"Right Alt", VK_RMENU},
+            {L"Semicolon", VK_OEM_1},
+            {L"Equals", VK_OEM_PLUS},
+            {L"Comma", VK_OEM_COMMA},
+            {L"Hyphen", VK_OEM_MINUS},
+            {L"Period", VK_OEM_PERIOD},
+            {L"Slash", VK_OEM_2},
+            {L"Tilde", VK_OEM_3},
+            {L"LeftBracket", VK_OEM_4},
+            {L"Backslash", VK_OEM_5},
+            {L"RightBracket", VK_OEM_6},
+            {L"Apostrophe", VK_OEM_7},
+        };
+
+        for (const KeyName& entry : names)
+        {
+            if (lstrcmpiW(value, entry.name) == 0)
+            {
+                return entry.vk;
+            }
+        }
 
         return fallback;
     }
