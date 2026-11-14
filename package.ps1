@@ -1,40 +1,63 @@
-# package.ps1 - build the mod-only ZIP for Nexus upload into dist\
-#   Configurable Dodge Mod_<ver>_mod-only.zip : the script mod (requires an existing UE4SS)
-# Existing archives are never overwritten.
+# package.ps1 - build the Nexus uploads into dist\
+#   ConfigurableDodgeNativeDist_UE4SS\Configurable Dodge Mod_<ver>_UE4SS.zip
+#   ConfigurableDodgeNativeDist_DLL\Configurable Dodge Mod_<ver>_DLL.zip
+# dist\ is ignored by git; these archives are the upload artifacts.
+# The DLL archive is built from source, so the repo never carries a binary.
 param(
-    [string]$Version = "3.4"
+    [string]$Ue4ssVersion = "3.4",
+    [string]$DllVersion = "4.0",
+    [string]$Gcc = "g++"
 )
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSCommandPath
-$Dist = Join-Path $ProjectRoot "dist"
-New-Item -ItemType Directory -Path $Dist -Force | Out-Null
+$Ue4ssSrc = Join-Path $ProjectRoot "src\ConfigurableDodgeMod_UE4SS"
+$DllSrc = Join-Path $ProjectRoot "src\ConfigurableDodgeMod_DLL"
+$Readme = Join-Path $ProjectRoot "README.md"
 
-$ModSrc = Join-Path $ProjectRoot "src\ConfigurableDodgeMod_UE4SS"
-if (-not (Test-Path (Join-Path $ModSrc "Scripts\main.lua"))) {
-    throw "src\ConfigurableDodgeMod_UE4SS\Scripts\main.lua not found"
+$Ue4ssDist = Join-Path $ProjectRoot "dist\ConfigurableDodgeNativeDist_UE4SS"
+$DllDist = Join-Path $ProjectRoot "dist\ConfigurableDodgeNativeDist_DLL"
+New-Item -ItemType Directory -Path $Ue4ssDist, $DllDist -Force | Out-Null
+
+function New-Stage([string]$Name) {
+    $stagingRoot = Join-Path $env:TEMP "opencode\Configurable Dodge Mod_pkg"
+    $stage = Join-Path $stagingRoot $Name
+    if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+    New-Item -ItemType Directory -Path $stage -Force | Out-Null
+    # Ship the README, minus the GitHub-only thumbnail.
+    $readme = (Get-Content -LiteralPath $Readme -Raw) -replace '(?m)^!\[[^\]]*\]\(media/[^)]*\)\r?\n\r?\n', ''
+    Set-Content -LiteralPath (Join-Path $stage "README.md") -Value $readme -Encoding UTF8 -NoNewline
+    return $stage
 }
 
-$StagingRoot = Join-Path $env:TEMP "opencode\Configurable Dodge Mod_pkg"
-if (Test-Path $StagingRoot) { Remove-Item $StagingRoot -Recurse -Force }
+function New-Zip([string]$Stage, [string]$ZipPath) {
+    if (Test-Path $ZipPath) { throw "Refusing to overwrite existing package: $ZipPath" }
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($Stage, $ZipPath)
+    Write-Output "built $ZipPath"
+}
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-$name = "Configurable Dodge Mod_$($Version)_mod-only"
-$stage = Join-Path $StagingRoot $name
-$modDst = Join-Path $stage "ConfigurableDodgeMod"
-New-Item -ItemType Directory -Path (Join-Path $modDst "Scripts") -Force | Out-Null
-Copy-Item (Join-Path $ModSrc "Scripts\main.lua") (Join-Path $modDst "Scripts\main.lua")
-Copy-Item (Join-Path $ModSrc "ConfigurableDodgeMod.ini") $modDst
+# UE4SS variant: the Lua script mod.
+$stage = New-Stage "ue4ss"
+$mod = Join-Path $stage "ConfigurableDodgeMod"
+New-Item -ItemType Directory -Path (Join-Path $mod "Scripts") -Force | Out-Null
+Copy-Item (Join-Path $Ue4ssSrc "Scripts\main.lua") (Join-Path $mod "Scripts\main.lua")
+Copy-Item (Join-Path $Ue4ssSrc "ConfigurableDodgeMod.ini") $mod
+New-Zip $stage (Join-Path $Ue4ssDist "Configurable Dodge Mod_$($Ue4ssVersion)_UE4SS.zip")
 
-# Keep the GitHub thumbnail, but do not leave a broken local link in the ZIP.
-Copy-Item (Join-Path $ProjectRoot "README.md") $stage
-$readmePath = Join-Path $stage "README.md"
-$readme = (Get-Content -LiteralPath $readmePath -Raw) -replace '(?m)^!\[Configurable Dodge Mod thumbnail\]\(media/main\.png\)\r?\n\r?\n', ''
-Set-Content -LiteralPath $readmePath -Value $readme -Encoding UTF8 -NoNewline
+# DLL variant: compile, then ship the drop-in folder.
+$build = Join-Path $ProjectRoot "build"
+New-Item -ItemType Directory -Path $build -Force | Out-Null
+$dll = Join-Path $build "main.dll"
+& $Gcc -std=c++17 -O2 -shared -static -o $dll (Join-Path $DllSrc "dodge.cpp")
+if ($LASTEXITCODE -ne 0) { throw "compile failed with exit code $LASTEXITCODE" }
 
-$zipPath = Join-Path $Dist "$name.zip"
-if (Test-Path $zipPath) { throw "Refusing to overwrite existing package: $zipPath" }
-[System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $zipPath)
-Write-Output "built $zipPath"
+$stage = New-Stage "dll"
+$mod = Join-Path $stage "ConfigurableDodgeNative"
+New-Item -ItemType Directory -Path (Join-Path $mod "dlls") -Force | Out-Null
+Copy-Item $dll (Join-Path $mod "dlls\main.dll")
+Copy-Item (Join-Path $DllSrc "ConfigurableDodge.ini") $mod
+New-Zip $stage (Join-Path $DllDist "Configurable Dodge Mod_$($DllVersion)_DLL.zip")
+
 Write-Output "done."

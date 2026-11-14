@@ -7,6 +7,7 @@ Two builds, same behaviour: a [b]UE4SS (Lua)[/b] script and a [b]DLL (C++)[/b] v
 
 [size=4][b]Installation[/b][/size][size=3][color=#D4D4D8]
 [i]Requires an existing update 2.1 UE4SS installation.[/i]
+Download one: [b]Configurable Dodge Mod_<ver>_UE4SS.zip[/b] (Lua) or [b]Configurable Dodge Mod_<ver>_DLL.zip[/b] (compiled). Both behave the same.
 
 [b]UE4SS build[/b]
 [b]1.[/b] Copy [b]ConfigurableDodgeMod[/b] into [/color][/size][code]...\ue4ss\Mods\[/code][size=3][color=#D4D4D8]

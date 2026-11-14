@@ -5,31 +5,31 @@ Stamina-based dodge for **S.T.A.L.K.E.R. 2: Heart of Chornobyl 2.1** (build
 dodge keys; Skif dodges left, right or back, camera-relative. Keys and forces
 are edited in one ini and apply live — no MCM, no restart.
 
-Two implementations share the same behaviour and config keys:
+## Variants
 
-| Variant | Source | Ship this |
+| Variant | Source | Ships as |
 | --- | --- | --- |
 | **UE4SS (Lua)** | `src/ConfigurableDodgeMod_UE4SS` | `ConfigurableDodgeMod` folder |
-| **DLL (C++)** | `src/ConfigurableDodgeMod_DLL` | `dist/ConfigurableDodgeNative` folder |
+| **DLL (C++)** | `src/ConfigurableDodgeMod_DLL` | `ConfigurableDodgeNative` folder |
 
-Both load through **UE4SS for update 2.1**. The DLL variant compiles the dodge
-logic and reads the game's own functions; it uses UE4SS only as a loader and
-calls no UE4SS API.
+Both load through **UE4SS for update 2.1** and behave the same. The DLL variant
+compiles the dodge logic and reads the game's own functions; it uses UE4SS only
+as a loader and calls no UE4SS API.
 
 ## Install
 
-Requires an existing update 2.1 UE4SS installation.
+Requires an existing update 2.1 UE4SS installation. Download the archive for the
+variant you want (or build both with `package.ps1`).
 
-**UE4SS variant**
+**UE4SS**
 
-1. Copy `src/ConfigurableDodgeMod_UE4SS` into `Stalker2\Binaries\Win64\ue4ss\Mods\`
-   and rename it to `ConfigurableDodgeMod`.
+1. Copy `ConfigurableDodgeMod` into `Stalker2\Binaries\Win64\ue4ss\Mods\`.
 2. Add `ConfigurableDodgeMod : 1` to `ue4ss\Mods\mods.txt`.
 3. Start the game.
 
-**DLL variant**
+**DLL**
 
-1. Copy `dist/ConfigurableDodgeNative` into `Stalker2\Binaries\Win64\ue4ss\Mods\`.
+1. Copy `ConfigurableDodgeNative` into `Stalker2\Binaries\Win64\ue4ss\Mods\`.
 2. Add `ConfigurableDodgeNative : 1` to `ue4ss\Mods\mods.txt`.
 3. Start the game.
 
@@ -37,36 +37,45 @@ Uninstall either variant by deleting its folder and its `mods.txt` line.
 
 ## Configure
 
-| Variant | File, next to the mod folder contents |
+| Variant | File, in the mod folder |
 | --- | --- |
 | UE4SS | `ConfigurableDodgeMod.ini` |
 | DLL | `ConfigurableDodge.ini` |
 
-Both use the same keys: `Modality`, `ButtonKey`, `DoubleTapLeft/Right/Back`,
+Shared keys: `Modality`, `ButtonKey`, `DoubleTapLeft/Right/Back`,
 `DoubleTapWindow`, `SideHorizontal/SideVertical`, `BackHorizontal/BackVertical`,
 `StaminaCost`, `EnergyDrinkEffect`, `EnergyDrinkFreeSeconds`,
-`EnergyDrinkOveruseJump`. The DLL also has `Cooldown`, `RequireStamina`,
-`RequireCursorFree` and `Log`. Every key is documented in the ini comments,
-including the bindable key names, VK hex codes (`0x58`) and mouse buttons.
+`EnergyDrinkOveruseJump`. The DLL adds `Cooldown`, `RequireStamina`,
+`RequireCursorFree` and `Log`. Every key is documented in the ini comments.
 
 Save the file in game; changes apply within about two seconds. The DLL variant
 only ticks while the game window has focus, so edit while playing, not while
 alt-tabbed.
 
-## Build the DLL variant
+## Build
 
-Needs MinGW-w64 (GCC 13+) and nothing else:
+Needs PowerShell 5.1 and MinGW-w64 (`g++` on `PATH`, or pass `-Gcc`):
 
 ```powershell
-g++ -std=c++17 -O2 -shared -static -o dist\ConfigurableDodgeNative\dlls\main.dll src\ConfigurableDodgeMod_DLL\dodge.cpp
+.\package.ps1
 ```
 
-Close the game before replacing `dlls\main.dll`; Windows holds the loaded image
-open. Everything the DLL assumes about the game was read out of build
-`a6b31ee`: `FUObjectArray` RVA `0xA0D4980`, the `PeekMessageW` IAT slot
-`0x9C37B30`, the stamina/overuse function RVAs, the struct offsets in
-`ue4ss\UE4SS_ObjectDump.txt`, and the `LaunchCharacter` vtable slot `0x948`.
-A game update invalidates them; the mod logs its scan stages and refuses any
+It compiles the DLL and writes both upload archives:
+
+```
+dist\ConfigurableDodgeNativeDist_UE4SS\Configurable Dodge Mod_<ver>_UE4SS.zip
+dist\ConfigurableDodgeNativeDist_DLL\Configurable Dodge Mod_<ver>_DLL.zip
+```
+
+`dist\` is generated and ignored by git; archives are never overwritten, so bump
+`-Ue4ssVersion` / `-DllVersion` for a new release. `Deploy.ps1` installs the
+UE4SS variant straight into a detected game folder.
+
+Everything the DLL assumes about the game was read out of build `a6b31ee`:
+`FUObjectArray` RVA `0xA0D4980`, the `PeekMessageW` IAT slot `0x9C37B30`, the
+stamina/overuse function RVAs, the struct offsets in
+`ue4ss\UE4SS_ObjectDump.txt`, and the `LaunchCharacter` vtable slot `0x948`. A
+game update invalidates them: the mod logs its scan stages and refuses any
 launch whose target is outside the game image instead of crashing.
 
 ## Bindable keys
