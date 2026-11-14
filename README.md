@@ -1,5 +1,7 @@
 # Configurable Dodge Mod
 
+![Configurable Dodge Mod thumbnail](media/main.png)
+
 Stamina-based dodge for **S.T.A.L.K.E.R. 2: Heart of Chornobyl 2.1** (build
 `a6b31ee`). Hold a movement key and press the dodge button, or double-tap your
 dodge keys; Skif dodges left, right or back, camera-relative. Keys and forces
