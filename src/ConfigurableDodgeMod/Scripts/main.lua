@@ -1,6 +1,6 @@
 -- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v3.4
 -- Input: UE4SS keybind events only, including raw modifier-key bindings.
--- No listener, no pipe, no hooks, no engine key-state polling.
+-- One UFunction hook (energy-drink detection); no pipe, no engine key-state polling.
 -- Config: ConfigurableDodgeMod.ini (live-reloaded).
 
 local UEHelpers = require("UEHelpers")
@@ -27,6 +27,9 @@ do
     end
 end
 
+-- Temporary probe for the in-game verification pass (removed after it).
+local DEV_PROBE = true
+
 -- ================= configuration =================
 local MODALITY        = "button"           -- "button" or "doubletap"
 local KEY_DODGE_BTN   = "Left Alt"
@@ -44,6 +47,9 @@ local COOLDOWN          = 0.60
 local ENERGY_DRINK_ENABLED = true
 local ENERGY_DRINK_FREE_SECONDS = 4.5
 local ENERGY_DRINK_JUMP = 50.0
+local INVINCIBLE       = true
+local INVULN_SECONDS   = 0.4
+local ALLOW_AIR_DODGE  = true
 
 local function Trim(s)
     return (string.gsub(s or "", "^%s*(.-)%s*$", "%1"))
@@ -60,6 +66,9 @@ local function ParseIniValue(content, key)
     end
     return nil
 end
+
+-- assigned by the invulnerability block below; ApplyConfig runs before that
+local EndInvulnerability = nil
 
 local function ApplyConfig(content)
     local function num(key, current)
@@ -87,6 +96,10 @@ local function ApplyConfig(content)
     ENERGY_DRINK_ENABLED = num("EnergyDrinkEffect", ENERGY_DRINK_ENABLED and 1 or 0) ~= 0
     ENERGY_DRINK_FREE_SECONDS = num("EnergyDrinkFreeSeconds", ENERGY_DRINK_FREE_SECONDS)
     ENERGY_DRINK_JUMP = num("EnergyDrinkOveruseJump", ENERGY_DRINK_JUMP)
+    INVINCIBLE = num("Invincibility", INVINCIBLE and 1 or 0) ~= 0
+    INVULN_SECONDS = num("InvincibilitySeconds", INVULN_SECONDS)
+    ALLOW_AIR_DODGE = num("AllowAirDodge", ALLOW_AIR_DODGE and 1 or 0) ~= 0
+    if not INVINCIBLE and EndInvulnerability ~= nil then EndInvulnerability() end
 end
 
 local iniContent = nil
@@ -100,6 +113,41 @@ if cfgPath ~= nil then
     end)
 end
 if iniContent ~= nil then ApplyConfig(iniContent) end
+
+-- ================= periodic scheduler =================
+-- One pump drives every recurring job; members register themselves with Every.
+-- Cadence counts pump ticks, so task timing never depends on a second clock.
+local function Now()
+    return os.clock()
+end
+
+local TICK_MS = 250
+local scheduled = {}
+
+local function Every(name, everyMs, run)
+    scheduled[name] = { ticks = math.max(1, math.floor(everyMs / TICK_MS + 0.5)), due = 1, run = run }
+end
+
+local function ScheduleOnce(delayMs, run)
+    LoopAsync(math.max(16, math.floor(delayMs)), function()
+        if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
+        pcall(run)
+        return true
+    end)
+end
+
+LoopAsync(TICK_MS, function()
+    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
+    for name, task in pairs(scheduled) do
+        task.due = task.due - 1
+        if task.due <= 0 then
+            task.due = task.ticks
+            local ok, err = pcall(task.run)
+            if not ok then print("[Configurable Dodge Mod] task " .. name .. " failed: " .. tostring(err)) end
+        end
+    end
+    return false
+end)
 
 -- ================= dodge logic =================
 -- cached player controller: UEHelpers.GetPlayerController() runs an uncached
@@ -126,10 +174,6 @@ local lastOveruse = nil
 local lastOveruseAt = 0.0
 local lastPawnKey = nil
 
-local function Now()
-    return os.clock()
-end
-
 local function ParamNumber(p)
     if p == nil then return nil end
     if type(p) == "number" then return p end
@@ -142,6 +186,14 @@ local function ParamNumber(p)
         if n ~= nil then return n end
     end
     return nil
+end
+
+-- UE4SS returns the property value directly; unwrap the result table shape too.
+local function ReadPropertyValue(obj, name)
+    local ok, v = pcall(function() return obj:GetPropertyValue(name) end)
+    if not ok then return nil end
+    if type(v) == "table" then v = v.return_value or v.returnValue end
+    return v
 end
 
 local function PawnKey(obj)
@@ -178,6 +230,28 @@ local function RefreshOveruse(Pawn)
     ObserveOveruse(v, t, PawnKey(Pawn), recent)
 end
 
+-- The overuse setter is the drink event itself; the sampler is only a fallback
+-- for when this hook cannot be installed.
+local ENERGY_HOOK_OK = false
+do
+    local ok = pcall(function()
+        RegisterHook("/Script/Stalker2.Obj:SetEnergeticOveruseValue", function(ctx, value)
+            if not ENERGY_DRINK_ENABLED then return end
+            local v = ParamNumber(value)
+            if v == nil then return end
+            local obj = nil
+            pcall(function() obj = ctx:get() end)
+            local t = Now()
+            local recent = lastOveruse ~= nil and (t - lastOveruseAt) <= 5.0
+            ObserveOveruse(v, t, obj ~= nil and PawnKey(obj) or nil, recent)
+            if DEV_PROBE then
+                print(string.format("[probe] overuse set value=%.1f obj=%s", v, obj ~= nil and PawnKey(obj) or "nil"))
+            end
+        end)
+    end)
+    ENERGY_HOOK_OK = ok
+end
+
 local function SpendStamina(Pawn)
     if STAMINA_COST <= 0.0 then return true end
     if ENERGY_DRINK_ENABLED then
@@ -204,14 +278,160 @@ local function SpendStamina(Pawn)
     return true
 end
 
-local function BuildLaunchVector(direction)
+-- cached movement component (live movement input vector)
+local lastInputComponentCache = nil
+
+local function GetMoveInputComponent(Pawn)
+    if lastInputComponentCache ~= nil then
+        local ok, valid = pcall(function() return lastInputComponentCache:IsValid() end)
+        if ok and valid then return lastInputComponentCache end
+        lastInputComponentCache = nil
+    end
+    local ok, CM = pcall(function() return Pawn:GetMovementComponent() end)
+    if ok and CM ~= nil and CM:IsValid() then
+        lastInputComponentCache = CM
+        return CM
+    end
+    return nil
+end
+
+local fallingUnavailableLogged = false
+
+local function IsPawnFalling(Pawn)
+    local CM = GetMoveInputComponent(Pawn)
+    if CM == nil then return false end
+    local ok, v = pcall(function() return CM:IsFalling() end)
+    if ok and type(v) == "boolean" then return v end
+    local mode = ParamNumber(ReadPropertyValue(CM, "MovementMode"))
+    if mode ~= nil then return mode == 3 end -- MOVE_Falling
+    if not fallingUnavailableLogged then
+        fallingUnavailableLogged = true
+        print("[Configurable Dodge Mod] air dodge: falling state unavailable")
+    end
+    return false
+end
+
+local function GetCameraRotation()
     local PC = GetPC()
     if PC == nil then return nil end
     local CameraManager = PC.PlayerCameraManager
     if CameraManager == nil or not CameraManager:IsValid() then return nil end
+    local ok, rot = pcall(function() return CameraManager:GetCameraRotation() end)
+    if ok and rot ~= nil then return rot end
+    return nil
+end
+
+-- ================= invincibility frames =================
+-- One dispatch, one backend: the engine damage flag first, the game's own
+-- CppMediator second, an HP clamp last. Never leave the pawn invulnerable.
+local INVULN_BACKEND = "auto" -- "auto" | "flag" | "mediator" | "clamp"
+
+local invulnBackend = nil
+local invulnSeq = 0
+local invulnPawn = nil
+local invulnHp = nil
+
+local mediatorCache = nil
+
+local function GetMediator()
+    if mediatorCache ~= nil then
+        local ok, valid = pcall(function() return mediatorCache:IsValid() end)
+        if ok and valid then return mediatorCache end
+        mediatorCache = nil
+    end
+    local ok, obj = pcall(function() return StaticFindObject("/Script/Stalker2.Default__CppMediator") end)
+    if ok and obj ~= nil and obj:IsValid() then
+        mediatorCache = obj
+        return obj
+    end
+    return nil
+end
+
+local function SetDamageFlag(Pawn, invulnerable)
+    return pcall(function() Pawn:SetPropertyValue("bCanBeDamaged", not invulnerable) end)
+end
+
+local function FlagInvulnWorks(Pawn)
+    if not SetDamageFlag(Pawn, true) then return false end
+    local readBack = ReadPropertyValue(Pawn, "bCanBeDamaged")
+    SetDamageFlag(Pawn, false)
+    return readBack == false
+end
+
+local function ResolveBackend(Pawn)
+    if INVULN_BACKEND ~= "auto" then return INVULN_BACKEND end
+    -- The game's own immunity call is the one its damage components consult;
+    -- the engine flag is the fallback when that object is unavailable.
+    local mediator = GetMediator()
+    if mediator ~= nil then
+        local ok = pcall(function() mediator:ResetInvulnerable(Pawn) end)
+        if ok then return "mediator" end
+    end
+    if FlagInvulnWorks(Pawn) then return "flag" end
+    return "clamp"
+end
+
+local function SetInvulnerable(Pawn, on)
+    if Pawn == nil then return end
+    if invulnBackend == nil then
+        invulnBackend = ResolveBackend(Pawn)
+        if invulnBackend == "clamp" then
+            print("[Configurable Dodge Mod] invulnerability: HP clamp fallback")
+        end
+    end
+    if invulnBackend == "flag" then
+        SetDamageFlag(Pawn, on)
+    elseif invulnBackend == "mediator" then
+        local mediator = GetMediator()
+        if mediator ~= nil then
+            pcall(function()
+                if on then mediator:MakeInvulnerable(Pawn)
+                else mediator:ResetInvulnerable(Pawn) end
+            end)
+        end
+    elseif on then
+        invulnHp = nil
+        pcall(function() invulnHp = ParamNumber(Pawn:GetHP()) end)
+    else
+        invulnHp = nil
+    end
+end
+
+local function BeginInvulnerability(Pawn)
+    if not INVINCIBLE or INVULN_SECONDS <= 0.0 then return end
+    if invulnPawn ~= nil and invulnPawn ~= Pawn then
+        pcall(function() SetInvulnerable(invulnPawn, false) end)
+    end
+    invulnSeq = invulnSeq + 1
+    local seq = invulnSeq
+    invulnPawn = Pawn
+    SetInvulnerable(Pawn, true)
+    ScheduleOnce(INVULN_SECONDS * 1000.0, function()
+        if seq ~= invulnSeq then return end
+        invulnPawn = nil
+        SetInvulnerable(Pawn, false)
+    end)
+end
+
+EndInvulnerability = function()
+    invulnSeq = invulnSeq + 1
+    local pawn = invulnPawn
+    invulnPawn = nil
+    if pawn ~= nil then SetInvulnerable(pawn, false) end
+end
+
+-- only produces work on the clamp backend
+Every("clamp", 100, function()
+    local pawn = invulnPawn
+    local hp = invulnHp
+    if pawn == nil or hp == nil then return end
+    ExecuteInGameThread(function() pcall(function() pawn:ForceSetHP(hp) end) end)
+end)
+
+local function BuildLaunchVector(direction, Rot)
+    if Rot == nil then Rot = GetCameraRotation() end
+    if Rot == nil then return nil end
     local MathLib = UEHelpers.GetKismetMathLibrary()
-    local okRot, Rot = pcall(function() return CameraManager:GetCameraRotation() end)
-    if not okRot or Rot == nil then return nil end
 
     local DirVector
     if direction == "left" then
@@ -233,7 +453,7 @@ local function BuildLaunchVector(direction)
     return MathLib:Add_VectorVector(Lateral, Up)
 end
 
-local function DoDodge(direction)
+local function DoDodge(direction, Rot)
     if Now() - lastDodge < COOLDOWN then return end
     local PC = GetPC()
     if PC == nil then return end
@@ -247,35 +467,21 @@ local function DoDodge(direction)
     end)
     if blocked then return end
 
-    local Velocity = BuildLaunchVector(direction)
+    -- a refused airborne dodge must not spend stamina
+    if not ALLOW_AIR_DODGE and IsPawnFalling(Pawn) then return end
+
+    local Velocity = BuildLaunchVector(direction, Rot)
     if Velocity == nil or not SpendStamina(Pawn) then return end
 
     lastDodge = Now()
-    ExecuteInGameThread(function()
-        local ok, err = pcall(function()
-            Pawn:LaunchCharacter(Velocity, true, true)
-        end)
-        if not ok then
-            print(string.format("[Configurable Dodge Mod] LaunchCharacter failed: %s", tostring(err)))
-        end
+    BeginInvulnerability(Pawn)
+    local ok, err = pcall(function()
+        Pawn:LaunchCharacter(Velocity, true, true)
     end)
-end
-
--- cached movement component (live movement input vector)
-local lastInputComponentCache = nil
-
-local function GetMoveInputComponent(Pawn)
-    if lastInputComponentCache ~= nil then
-        local ok, valid = pcall(function() return lastInputComponentCache:IsValid() end)
-        if ok and valid then return lastInputComponentCache end
-        lastInputComponentCache = nil
+    if not ok then
+        EndInvulnerability()
+        print(string.format("[Configurable Dodge Mod] LaunchCharacter failed: %s", tostring(err)))
     end
-    local ok, CM = pcall(function() return Pawn:GetMovementComponent() end)
-    if ok and CM ~= nil and CM:IsValid() then
-        lastInputComponentCache = CM
-        return CM
-    end
-    return nil
 end
 
 --- which direction is the player's movement input currently pressed in?
@@ -299,11 +505,9 @@ local function GetMoveInputDirection()
     if type(ix) ~= "number" then return nil end
     if ix * ix + iy * iy + iz * iz < 0.01 then return nil end
 
-    local CameraManager = PC.PlayerCameraManager
-    if CameraManager == nil or not CameraManager:IsValid() then return nil end
+    local rot = GetCameraRotation()
+    if rot == nil then return nil end
     local MathLib = UEHelpers.GetKismetMathLibrary()
-    local okRot, rot = pcall(function() return CameraManager:GetCameraRotation() end)
-    if not okRot or rot == nil then return nil end
     local fwd = MathLib:GetForwardVector(rot)
     local right = MathLib:GetRightVector(rot)
     local dotFwd = fwd.X * ix + fwd.Y * iy + fwd.Z * iz
@@ -311,9 +515,9 @@ local function GetMoveInputDirection()
 
     -- dominant camera axis decides (forward movement maps to no dodge)
     if math.abs(dotRight) >= math.abs(dotFwd) then
-        if dotRight > 0.0 then return "right" else return "left" end
+        if dotRight > 0.0 then return "right", rot else return "left", rot end
     else
-        if dotFwd < 0.0 then return "back" end
+        if dotFwd < 0.0 then return "back", rot end
     end
     return nil
 end
@@ -322,8 +526,8 @@ end
 --- currently pressed; standing still / forward without lateral input = none
 local function HandleButtonPress()
     if MODALITY ~= "button" then return end
-    local d = GetMoveInputDirection()
-    if d ~= nil then DoDodge(d) end
+    local d, rot = GetMoveInputDirection()
+    if d ~= nil then DoDodge(d, rot) end
 end
 
 -- ================= UE4SS keybind input =================
@@ -442,7 +646,7 @@ local function TapKey(d)
     local t = Now()
     if lastTap[d] > 0.0 and (t - lastTap[d]) <= DOUBLE_TAP_WINDOW then
         lastTap[d] = 0.0
-        DoDodge(d)
+        DoDodge(d, nil)
     else
         lastTap[d] = t
     end
@@ -493,34 +697,89 @@ local function EnsureInputBinds()
 end
 
 pcall(EnsureInputBinds)
+-- the game may not accept binds during the first seconds of a load
+ScheduleOnce(1000, EnsureInputBinds)
+ScheduleOnce(3000, EnsureInputBinds)
 
--- 1 s maintenance: energy baseline and keybind upkeep
-LoopAsync(1000, function()
-    if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
-    ExecuteInGameThread(function()
-        pcall(function()
+-- energy sampling is only needed when the overuse hook could not be installed
+if not ENERGY_HOOK_OK then
+    Every("energy", 1000, function()
+        if not ENERGY_DRINK_ENABLED then return end
+        ExecuteInGameThread(function()
             local PC = GetPC()
             if PC == nil then return end
             local pawn = PC.Pawn
-            if pawn ~= nil and pawn:IsValid() and ENERGY_DRINK_ENABLED then
-                RefreshOveruse(pawn)
-            end
-            EnsureInputBinds()
+            if pawn ~= nil and pawn:IsValid() then RefreshOveruse(pawn) end
         end)
     end)
-    return false
-end)
+end
 print(string.format("[Configurable Dodge Mod] v3.4 loaded - keybind input - mode: %s (%s), stamina cost %.0f",
     MODALITY,
     MODALITY == "button" and ("dodge button " .. KEY_DODGE_BTN) or ("double-tap " .. DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK),
     STAMINA_COST))
 
+-- ================= temporary probe (removed after verification) =================
+local probeDone = false
+
+local function RunProbe(Pawn)
+    local hp = nil
+    pcall(function() hp = ParamNumber(Pawn:GetHP()) end)
+    print(string.format("[probe] GetHP=%s", tostring(hp)))
+
+    local okWrite = SetDamageFlag(Pawn, true)
+    local readInvuln = ReadPropertyValue(Pawn, "bCanBeDamaged")
+    local okRestore = SetDamageFlag(Pawn, false)
+    local readNormal = ReadPropertyValue(Pawn, "bCanBeDamaged")
+    print(string.format("[probe] bCanBeDamaged write=%s read_invuln=%s restore=%s read_normal=%s",
+        tostring(okWrite), tostring(readInvuln), tostring(okRestore), tostring(readNormal)))
+
+    local mediator = GetMediator()
+    print("[probe] CppMediator=" .. (mediator ~= nil and "found" or "missing"))
+    if mediator ~= nil then
+        local okMake = pcall(function() mediator:MakeInvulnerable(Pawn) end)
+        local okReset = pcall(function() mediator:ResetInvulnerable(Pawn) end)
+        print(string.format("[probe] MakeInvulnerable=%s ResetInvulnerable=%s", tostring(okMake), tostring(okReset)))
+    end
+
+    local CM = GetMoveInputComponent(Pawn)
+    if CM ~= nil then
+        local okFall, fall = pcall(function() return CM:IsFalling() end)
+        print(string.format("[probe] IsFalling ok=%s value=%s type=%s", tostring(okFall), tostring(fall), type(fall)))
+        local mode = ReadPropertyValue(CM, "MovementMode")
+        print(string.format("[probe] MovementMode=%s num=%s", tostring(mode), tostring(ParamNumber(mode))))
+    else
+        print("[probe] MovementComponent missing")
+    end
+
+    print(string.format("[probe] overuse_hook=%s backend=%s", tostring(ENERGY_HOOK_OK),
+        tostring(invulnBackend or ResolveBackend(Pawn))))
+end
+
+Every("probe", 1000, function()
+    if not DEV_PROBE then return end
+    ExecuteInGameThread(function()
+        local PC = GetPC()
+        if PC == nil then return end
+        local pawn = PC.Pawn
+        if pawn == nil or not pawn:IsValid() then return end
+        if not probeDone then
+            probeDone = true
+            pcall(RunProbe, pawn)
+        end
+        local hp = nil
+        pcall(function() hp = ParamNumber(pawn:GetHP()) end)
+        if hp ~= nil then
+            print(string.format("[probe] hp=%.1f invuln=%s falling=%s", hp,
+                tostring(invulnPawn ~= nil), tostring(IsPawnFalling(pawn))))
+        end
+    end)
+end)
+
 -- ================= ini live reload (always on) =================
 -- File I/O stays off the game thread; applying the new values is scheduled on
 -- the game thread. Changes apply within about two seconds without a restart.
 if cfgPath ~= nil then
-    LoopAsync(2000, function()
-        if DodgeMod_Generation ~= DODGE_MOD_GEN then return true end
+    Every("ini", 2000, function()
         local ok, err = pcall(function()
             local newIni
             pcall(function()
@@ -533,6 +792,7 @@ if cfgPath ~= nil then
                     local ok2, err2 = pcall(function()
                         ApplyConfig(newIni)
                         ResolveInputKeys()
+                        EnsureInputBinds()
                         print(string.format("[Configurable Dodge Mod] ini reloaded - mode %s, dodge button %s, stamina %.0f",
                             MODALITY, MODALITY == "button" and KEY_DODGE_BTN or (DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK), STAMINA_COST))
                     end)
@@ -541,7 +801,6 @@ if cfgPath ~= nil then
             end
         end)
         if not ok then print("[Configurable Dodge Mod] ini watcher error: " .. tostring(err)) end
-        return false
     end)
 end
 
