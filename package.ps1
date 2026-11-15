@@ -2,7 +2,7 @@
 #   Configurable Dodge Mod_<ver>_mod-only.zip : the script mod (requires an existing UE4SS)
 # Existing archives are never overwritten.
 param(
-    [string]$Version = "3.4"
+    [string]$Version = "3.5"
 )
 
 $ErrorActionPreference = "Stop"
