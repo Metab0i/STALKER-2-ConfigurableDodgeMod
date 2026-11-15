@@ -35,6 +35,18 @@ Set-Content -LiteralPath $readmePath -Value $readme -Encoding UTF8 -NoNewline
 
 $zipPath = Join-Path $Dist "$name.zip"
 if (Test-Path $zipPath) { throw "Refusing to overwrite existing package: $zipPath" }
-[System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $zipPath)
+# ZipArchive writes the entry names we pass through untouched; CreateFromDirectory
+# emits backslashes on .NET Framework, which is not what the ZIP format specifies.
+Add-Type -AssemblyName System.IO.Compression
+$zipStream = [System.IO.Compression.ZipFile]::Open($zipPath, 'Create')
+try {
+    Get-ChildItem -LiteralPath $stage -Recurse -File | ForEach-Object {
+        $entryName = $_.FullName.Substring($stage.Length + 1) -replace '\\', '/'
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $zipStream, $_.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+    }
+} finally {
+    $zipStream.Dispose()
+}
 Write-Output "built $zipPath"
 Write-Output "done."
