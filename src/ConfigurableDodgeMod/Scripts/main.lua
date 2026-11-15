@@ -1,9 +1,11 @@
--- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v3.5
+-- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v3.6
 -- Input: UE4SS keybind events only, including raw modifier-key bindings.
 -- One UFunction hook (energy-drink detection); no pipe, no engine key-state polling.
 -- Config: ConfigurableDodgeMod.ini (live-reloaded).
 
 local UEHelpers = require("UEHelpers")
+
+local MOD_VERSION = "3.6"
 
 -- Invalidate stale asynchronous callbacks if UE4SS restarts the mod.
 DodgeMod_Generation = (DodgeMod_Generation or 0) + 1
@@ -157,6 +159,19 @@ local function GetPC()
     return nil
 end
 
+-- The scripted pawn under a controller, or nil while a load is in flight.
+-- The property read is guarded: a controller can be destroyed between the
+-- validity check and the field access.
+local function PlayerPawn(PC)
+    if PC == nil then return nil end
+    local pawn = nil
+    pcall(function() pawn = PC.Pawn end)
+    if pawn == nil then return nil end
+    local ok, valid = pcall(function() return pawn:IsValid() end)
+    if ok and valid then return pawn end
+    return nil
+end
+
 local lastDodge = 0.0
 local lastStaminaMsg = 0.0
 local energyFreeUntil = 0.0
@@ -223,9 +238,19 @@ do
             if v == nil then return end
             local obj = nil
             pcall(function() obj = ctx:get() end)
+            -- The setter exists on every Stalker2 object, so an NPC or scripted
+            -- write must not arm the player's free-dodge window. When the hook
+            -- cannot name its object, keep the unfiltered sample instead of
+            -- losing drink detection entirely.
+            local key = nil
+            if obj ~= nil then
+                key = PawnKey(obj)
+                local pawn = PlayerPawn(GetPC())
+                if pawn == nil or key ~= PawnKey(pawn) then return end
+            end
             local t = Now()
             local recent = lastOveruse ~= nil and (t - lastOveruseAt) <= 5.0
-            ObserveOveruse(v, t, obj ~= nil and PawnKey(obj) or nil, recent)
+            ObserveOveruse(v, t, key, recent)
         end)
     end)
     ENERGY_HOOK_OK = ok
@@ -293,14 +318,17 @@ local function IsPawnFalling(Pawn)
     return false
 end
 
-local function BuildLaunchVector(direction)
-    local PC = GetPC()
-    if PC == nil then return nil end
-    local CameraManager = PC.PlayerCameraManager
+local function GetCameraRotation(PC)
+    local CameraManager = nil
+    pcall(function() CameraManager = PC.PlayerCameraManager end)
     if CameraManager == nil or not CameraManager:IsValid() then return nil end
+    local ok, Rot = pcall(function() return CameraManager:GetCameraRotation() end)
+    if not ok then return nil end
+    return Rot
+end
+
+local function BuildLaunchVector(Rot, direction)
     local MathLib = UEHelpers.GetKismetMathLibrary()
-    local okRot, Rot = pcall(function() return CameraManager:GetCameraRotation() end)
-    if not okRot or Rot == nil then return nil end
 
     local DirVector
     if direction == "left" then
@@ -322,12 +350,12 @@ local function BuildLaunchVector(direction)
     return MathLib:Add_VectorVector(Lateral, Up)
 end
 
-local function DoDodge(direction)
+local function DoDodge(direction, PC, Pawn, Rot)
     if Now() - lastDodge < COOLDOWN then return end
-    local PC = GetPC()
+    PC = PC or GetPC()
     if PC == nil then return end
-    local Pawn = PC.Pawn
-    if Pawn == nil or not Pawn:IsValid() then return end
+    Pawn = Pawn or PlayerPawn(PC)
+    if Pawn == nil then return end
 
     -- no dodging while gameplay is UI-blocked (stash, conversations, pause)
     local blocked = false
@@ -339,7 +367,9 @@ local function DoDodge(direction)
     -- a refused airborne dodge must not spend stamina
     if not ALLOW_AIR_DODGE and IsPawnFalling(Pawn) then return end
 
-    local Velocity = BuildLaunchVector(direction)
+    Rot = Rot or GetCameraRotation(PC)
+    if Rot == nil then return end
+    local Velocity = BuildLaunchVector(Rot, direction)
     if Velocity == nil or not SpendStamina(Pawn) then return end
 
     lastDodge = Now()
@@ -354,15 +384,19 @@ local function DoDodge(direction)
 end
 
 --- which direction is the player's movement input currently pressed in?
-local function GetMoveInputDirection()
-    local PC = GetPC()
-    if PC == nil then return nil end
-    local Pawn = PC.Pawn
-    if Pawn == nil or not Pawn:IsValid() then return nil end
+local inputVectorUnavailableLogged = false
+
+local function GetMoveInputDirection(Pawn, Rot)
     local CM = GetMoveInputComponent(Pawn)
     if CM == nil then return nil end
     local ok, iv = pcall(function() return CM:GetLastInputVector() end)
-    if not ok or iv == nil then return nil end
+    if not ok or iv == nil then
+        if not inputVectorUnavailableLogged then
+            inputVectorUnavailableLogged = true
+            print("[Configurable Dodge Mod] dodge direction unavailable: GetLastInputVector missing")
+        end
+        return nil
+    end
     local ix, iy, iz
     pcall(function()
         ix, iy, iz = iv.X, iv.Y, iv.Z
@@ -374,13 +408,9 @@ local function GetMoveInputDirection()
     if type(ix) ~= "number" then return nil end
     if ix * ix + iy * iy + iz * iz < 0.01 then return nil end
 
-    local CameraManager = PC.PlayerCameraManager
-    if CameraManager == nil or not CameraManager:IsValid() then return nil end
     local MathLib = UEHelpers.GetKismetMathLibrary()
-    local okRot, rot = pcall(function() return CameraManager:GetCameraRotation() end)
-    if not okRot or rot == nil then return nil end
-    local fwd = MathLib:GetForwardVector(rot)
-    local right = MathLib:GetRightVector(rot)
+    local fwd = MathLib:GetForwardVector(Rot)
+    local right = MathLib:GetRightVector(Rot)
     local dotFwd = fwd.X * ix + fwd.Y * iy + fwd.Z * iz
     local dotRight = right.X * ix + right.Y * iy + right.Z * iz
 
@@ -397,8 +427,14 @@ end
 --- currently pressed; standing still / forward without lateral input = none
 local function HandleButtonPress()
     if MODALITY ~= "button" then return end
-    local d = GetMoveInputDirection()
-    if d ~= nil then DoDodge(d) end
+    local PC = GetPC()
+    if PC == nil then return end
+    local Pawn = PlayerPawn(PC)
+    if Pawn == nil then return end
+    local Rot = GetCameraRotation(PC)
+    if Rot == nil then return end
+    local d = GetMoveInputDirection(Pawn, Rot)
+    if d ~= nil then DoDodge(d, PC, Pawn, Rot) end
 end
 
 -- ================= UE4SS keybind input =================
@@ -590,14 +626,13 @@ if not ENERGY_HOOK_OK then
     Every("energy", 1000, function()
         if not ENERGY_DRINK_ENABLED then return end
         ExecuteInGameThread(function()
-            local PC = GetPC()
-            if PC == nil then return end
-            local pawn = PC.Pawn
-            if pawn ~= nil and pawn:IsValid() then RefreshOveruse(pawn) end
+            local pawn = PlayerPawn(GetPC())
+            if pawn ~= nil then RefreshOveruse(pawn) end
         end)
     end)
 end
-print(string.format("[Configurable Dodge Mod] v3.5 loaded - keybind input - mode: %s (%s), stamina cost %.0f",
+print(string.format("[Configurable Dodge Mod] v%s loaded - keybind input - mode: %s (%s), stamina cost %.0f",
+    MOD_VERSION,
     MODALITY,
     MODALITY == "button" and ("dodge button " .. KEY_DODGE_BTN) or ("double-tap " .. DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK),
     STAMINA_COST))

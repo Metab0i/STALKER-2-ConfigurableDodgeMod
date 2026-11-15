@@ -22,6 +22,7 @@ Edit [b]ConfigurableDodgeMod.ini[/b] in the mod folder and save. Changes apply l
 [*][size=3][color=#D4D4D8][b]SideHorizontal / SideVertical[/b] - side dodge force (cm/s). Default [b]650 / 500[/b].[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]BackHorizontal / BackVertical[/b] - back dodge force (cm/s). Default [b]900 / 200[/b].[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]StaminaCost[/b] - stamina per dodge. Default [b]15[/b] (vanilla jump).[/color][/size][/*]
+[*][size=3][color=#D4D4D8][b]AllowAirDodge[/b] - allow dodging while airborne ([code]1[/code] / [code]0[/code]). An air dodge refused this way spends no stamina. Default [b]1[/b].[/color][/size][/*]
 [*][size=3][color=#D4D4D8][b]EnergyDrinkEffect / EnergyDrinkFreeSeconds[/b] - dodges are free for a moment after drinking an energy drink, matching the game's brief no-drain window. Enabled by default; window [b]4.5 s[/b].[/color][/size][/*]
 [/list]
 

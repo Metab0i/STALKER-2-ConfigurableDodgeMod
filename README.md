@@ -24,11 +24,12 @@ advertised as supported bindings.
 
 ## Energy drink interaction
 
-Vanilla energy drinks briefly stop stamina drain after drinking. The mod
-samples the game's energetic-overuse value once a second (and again on every
-dodge); a sharp rise means a drink was just consumed. Dodges during the same
-short window are free, matching the game's behaviour. Default window: 4.5 s.
-Set `EnergyDrinkEffect=0` to ignore it.
+Vanilla energy drinks briefly stop stamina drain after drinking. The mod hooks
+the game's energetic-overuse setter, so the drink is detected the moment it is
+consumed; only the player's own writes count. If that hook is unavailable on a
+future game build, it falls back to sampling the value once a second and again
+on every dodge. Dodges during the same short window are free, matching the
+game's behaviour. Default window: 4.5 s. Set `EnergyDrinkEffect=0` to ignore it.
 
 ## Install
 
@@ -47,6 +48,8 @@ Default controls: hold **A/D/S** and press **Left Alt** to dodge.
   back; forward-only movement does nothing.
 - In double-tap mode, double-tap the configured keys (Z / C / S by default).
 - 15 stamina per dodge. Low stamina and open menus/dialogs block dodges.
+- Airborne dodges are allowed by default. Set `AllowAirDodge=0` to restrict
+  dodging to the ground; an air dodge refused that way costs no stamina.
 - Right after an energy drink, dodges are free for the same short window in
   which the game itself stops stamina drain.
 
@@ -64,6 +67,7 @@ in game within ~2 seconds. No setup tool, no restart.
 | `SideHorizontal/SideVertical` | side dodge force (cm/s) | `650` / `500` |
 | `BackHorizontal/BackVertical` | back dodge force (cm/s) | `900` / `200` |
 | `StaminaCost` | stamina per dodge (`0` = free) | `15` |
+| `AllowAirDodge` | allow dodging while airborne (`1` / `0`); a refused air dodge costs no stamina | `1` |
 | `EnergyDrinkEffect` | free dodges during the drink's no-drain window (`1` / `0`) | `1` |
 | `EnergyDrinkFreeSeconds` | length of that window (seconds) | `4.5` |
 | `EnergyDrinkOveruseJump` | advanced; leave at `50` | `50` |
