@@ -1,11 +1,11 @@
--- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v3.6
+-- Configurable Dodge Mod for S.T.A.L.K.E.R. 2 (UE4SS Lua) - v3.7
 -- Input: UE4SS keybind events only, including raw modifier-key bindings.
 -- One UFunction hook (energy-drink detection); no pipe, no engine key-state polling.
 -- Config: ConfigurableDodgeMod.ini (live-reloaded).
 
 local UEHelpers = require("UEHelpers")
 
-local MOD_VERSION = "3.6"
+local MOD_VERSION = "3.7"
 
 -- Invalidate stale asynchronous callbacks if UE4SS restarts the mod.
 DodgeMod_Generation = (DodgeMod_Generation or 0) + 1
@@ -47,6 +47,8 @@ local ENERGY_DRINK_ENABLED = true
 local ENERGY_DRINK_FREE_SECONDS = 4.5
 local ENERGY_DRINK_JUMP = 50.0
 local ALLOW_AIR_DODGE  = true
+local INVINCIBILITY_ON_DODGE = true
+local INVINCIBILITY_SECONDS = 0.4
 
 local function Trim(s)
     return (string.gsub(s or "", "^%s*(.-)%s*$", "%1"))
@@ -91,6 +93,9 @@ local function ApplyConfig(content)
     ENERGY_DRINK_FREE_SECONDS = num("EnergyDrinkFreeSeconds", ENERGY_DRINK_FREE_SECONDS)
     ENERGY_DRINK_JUMP = num("EnergyDrinkOveruseJump", ENERGY_DRINK_JUMP)
     ALLOW_AIR_DODGE = num("AllowAirDodge", ALLOW_AIR_DODGE and 1 or 0) ~= 0
+    INVINCIBILITY_ON_DODGE = num("InvincibilityOnDodge", INVINCIBILITY_ON_DODGE and 1 or 0) ~= 0
+    INVINCIBILITY_SECONDS = num("InvincibilitySeconds", INVINCIBILITY_SECONDS)
+    if INVINCIBILITY_SECONDS < 0.0 then INVINCIBILITY_SECONDS = 0.0 end
 end
 
 local iniContent = nil
@@ -104,6 +109,11 @@ if cfgPath ~= nil then
     end)
 end
 if iniContent ~= nil then ApplyConfig(iniContent) end
+
+local function InvulnSummary()
+    if not INVINCIBILITY_ON_DODGE or INVINCIBILITY_SECONDS <= 0.0 then return "i-frames off" end
+    return string.format("i-frames %.2f s", INVINCIBILITY_SECONDS)
+end
 
 -- ================= periodic scheduler =================
 -- One pump drives every recurring job; members register themselves with Every.
@@ -350,6 +360,57 @@ local function BuildLaunchVector(Rot, direction)
     return MathLib:Add_VectorVector(Lateral, Up)
 end
 
+-- Dodge invincibility frames use the game's faction god mode through the engine's
+-- own console dispatcher. Calling XSetFactionGodMode directly on the console
+-- manager object hard-crashes this build (it dereferences a null console/player
+-- context), while ExecuteConsoleCommand is the supported path and is what the
+-- F10 console itself runs.
+local GODMODE_ON  = "XSetFactionGodMode Player true"
+local GODMODE_OFF = "XSetFactionGodMode Player false"
+local godModeFailedLogged = false
+
+local function RunConsoleCommand(cmd)
+    local PC = GetPC()
+    if PC == nil then return false end
+    local ok, err = pcall(function()
+        UEHelpers.GetKismetSystemLibrary():ExecuteConsoleCommand(PC, cmd, PC)
+    end)
+    if not ok then
+        if not godModeFailedLogged then
+            godModeFailedLogged = true
+            print("[Configurable Dodge Mod] console command failed: " .. tostring(err))
+        end
+        return false
+    end
+    return true
+end
+
+local invulnToken = 0
+
+local function ApplyDodgeInvincibility()
+    if not INVINCIBILITY_ON_DODGE or INVINCIBILITY_SECONDS <= 0.0 then return end
+    if not RunConsoleCommand(GODMODE_ON) then return end
+    invulnToken = invulnToken + 1
+    local token = invulnToken
+    -- The revert is intentionally not generation-guarded: a mod reload must
+    -- never leave faction god mode latched on for the rest of the session.
+    LoopAsync(math.max(16, math.floor(INVINCIBILITY_SECONDS * 1000)), function()
+        ExecuteInGameThread(function()
+            if invulnToken ~= token then return end -- a newer dodge owns the window
+            RunConsoleCommand(GODMODE_OFF)
+        end)
+        return true
+    end)
+end
+
+-- A mod reload or shutdown must not leave faction god mode latched on.
+pcall(function()
+    ModRef:OnUnload(function()
+        invulnToken = invulnToken + 1
+        ExecuteInGameThread(function() RunConsoleCommand(GODMODE_OFF) end)
+    end)
+end)
+
 local function DoDodge(direction, PC, Pawn, Rot)
     if Now() - lastDodge < COOLDOWN then return end
     PC = PC or GetPC()
@@ -373,6 +434,7 @@ local function DoDodge(direction, PC, Pawn, Rot)
     if Velocity == nil or not SpendStamina(Pawn) then return end
 
     lastDodge = Now()
+    ApplyDodgeInvincibility()
     ExecuteInGameThread(function()
         local ok, err = pcall(function()
             Pawn:LaunchCharacter(Velocity, true, true)
@@ -631,11 +693,12 @@ if not ENERGY_HOOK_OK then
         end)
     end)
 end
-print(string.format("[Configurable Dodge Mod] v%s loaded - keybind input - mode: %s (%s), stamina cost %.0f",
+print(string.format("[Configurable Dodge Mod] v%s loaded - keybind input - mode: %s (%s), stamina cost %.0f, %s",
     MOD_VERSION,
     MODALITY,
     MODALITY == "button" and ("dodge button " .. KEY_DODGE_BTN) or ("double-tap " .. DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK),
-    STAMINA_COST))
+    STAMINA_COST,
+    InvulnSummary()))
 
 -- ================= ini live reload (always on) =================
 -- File I/O stays off the game thread; applying the new values is scheduled on
@@ -655,8 +718,9 @@ if cfgPath ~= nil then
                         ApplyConfig(newIni)
                         ResolveInputKeys()
                         EnsureInputBinds()
-                        print(string.format("[Configurable Dodge Mod] ini reloaded - mode %s, dodge button %s, stamina %.0f",
-                            MODALITY, MODALITY == "button" and KEY_DODGE_BTN or (DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK), STAMINA_COST))
+                        print(string.format("[Configurable Dodge Mod] ini reloaded - mode %s, dodge button %s, stamina %.0f, %s",
+                            MODALITY, MODALITY == "button" and KEY_DODGE_BTN or (DT_LEFT .. "/" .. DT_RIGHT .. "/" .. DT_BACK), STAMINA_COST,
+                            InvulnSummary()))
                     end)
                     if not ok2 then print("[Configurable Dodge Mod] ini apply error: " .. tostring(err2)) end
                 end)

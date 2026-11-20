@@ -31,6 +31,17 @@ future game build, it falls back to sampling the value once a second and again
 on every dodge. Dodges during the same short window are free, matching the
 game's behaviour. Default window: 4.5 s. Set `EnergyDrinkEffect=0` to ignore it.
 
+## Dodge invincibility frames
+
+A successful dodge briefly makes the player invulnerable, which is what makes
+dodging through fire viable. It uses the game's own faction god mode
+(`XSetFactionGodMode Player true`), toggled through the engine console
+dispatcher and switched off again when the window ends; a mod reload or unload
+also switches it off. The window is `InvincibilitySeconds` (default `0.4`),
+live-reloaded. Because the game's switch is faction-wide, allies in the Player
+faction are covered for the same window. Set `InvincibilityOnDodge=0` to
+disable it entirely.
+
 ## Install
 
 Requires an existing update 2.1 UE4SS installation.
@@ -68,6 +79,8 @@ in game within ~2 seconds. No setup tool, no restart.
 | `BackHorizontal/BackVertical` | back dodge force (cm/s) | `900` / `200` |
 | `StaminaCost` | stamina per dodge (`0` = free) | `15` |
 | `AllowAirDodge` | allow dodging while airborne (`1` / `0`); a refused air dodge costs no stamina | `1` |
+| `InvincibilityOnDodge` | brief invulnerability on a successful dodge (`1` / `0`) | `1` |
+| `InvincibilitySeconds` | length of that window in seconds | `0.4` |
 | `EnergyDrinkEffect` | free dodges during the drink's no-drain window (`1` / `0`) | `1` |
 | `EnergyDrinkFreeSeconds` | length of that window (seconds) | `4.5` |
 | `EnergyDrinkOveruseJump` | advanced; leave at `50` | `50` |
