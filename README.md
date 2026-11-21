@@ -38,9 +38,10 @@ dodging through fire viable. It uses the game's own faction god mode
 (`XSetFactionGodMode Player true`), toggled through the engine console
 dispatcher and switched off again when the window ends; a mod reload or unload
 also switches it off. The window is `InvincibilitySeconds` (default `0.4`),
-live-reloaded. Because the game's switch is faction-wide, allies in the Player
-faction are covered for the same window. Set `InvincibilityOnDodge=0` to
-disable it entirely.
+live-reloaded. The switch is faction-wide, but shipped data shows the Player
+faction contains only Skif (no NPC prototype joins it, and companions keep
+their own faction), so normal allies are not covered; any scripted Player-faction
+actor is unverified. Set `InvincibilityOnDodge=0` to disable it entirely.
 
 ## Install
 
