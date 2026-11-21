@@ -9,7 +9,7 @@ editing a single ini file, live.
 
 ## Demo
 
-[![Dodging demo video](https://img.youtube.com/vi/aLGJFVEcolc/0.jpg)](https://www.youtube.com/watch?v=aLGJFVEcolc)
+[![Dodging demo video](https://img.youtube.com/vi/Qtjv-z2jTXk/0.jpg)](https://www.youtube.com/watch?v=Qtjv-z2jTXk)
 
 ## How key detection works
 
